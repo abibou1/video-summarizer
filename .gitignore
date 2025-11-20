@@ -35,6 +35,9 @@ Thumbs.db
 *.db
 *.tsv
 
+# downloads
+transcripts/
+
 # Node.js (if applicable)
 node_modules/
 npm-debug.log*

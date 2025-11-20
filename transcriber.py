@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Optional, Tuple
 
 from openai import OpenAI
-from pytube import YouTube
+from yt_dlp import YoutubeDL
 
 from config import Config
 
@@ -20,15 +20,20 @@ class WhisperTranscriber:
 
     def download_audio(self, video_id: str) -> Path:
         url = f"https://www.youtube.com/watch?v={video_id}"
-        yt = YouTube(url)
-        stream = yt.streams.filter(only_audio=True).first()
-        if stream is None:
-            raise RuntimeError(f"No audio stream available for {video_id}")
-        output_path = stream.download(
-            output_path=str(self.config.downloads_dir),
-            filename=f"{video_id}.mp4",
-        )
-        return Path(output_path)
+        output_template = str(self.config.downloads_dir / f"{video_id}.%(ext)s")
+
+        ydl_opts = {
+            "format": "140/bestaudio/best",  # prefer m4a
+            "quiet": True,
+            "no_warnings": True,
+            "cachedir": False,
+            "outtmpl": output_template,
+        }
+
+        with YoutubeDL(ydl_opts) as ydl:
+            info = ydl.extract_info(url, download=True)
+            downloaded = Path(ydl.prepare_filename(info))
+        return downloaded
 
     def transcribe(
         self, video_id: str, title: Optional[str] = None, write_file: bool = True
