@@ -19,7 +19,7 @@ pip install -r requirements.txt
 Set the following environment variables (a `.env` file is recommended):
 
 - `YOUTUBE_API_KEY` – provided key for the YouTube Data API
-- `YOUTUBE_CHANNEL_HANDLE` – channel handle such as `@GarethSolowayProTrader`
+- `YOUTUBE_CHANNEL_HANDLE` – channel handle such as `@anyYoutubeChannel`
 - `OPENAI_API_KEY` – OpenAI API key with Whisper access
 
 Optional overrides:
@@ -34,7 +34,7 @@ Example `.env`:
 
 ```
 YOUTUBE_API_KEY=AIzaSy...
-YOUTUBE_CHANNEL_HANDLE=@GarethSolowayProTrader
+YOUTUBE_CHANNEL_HANDLE=@anyYoutubeChannel
 OPENAI_API_KEY=sk-...
 POLL_INTERVAL_SECONDS=1800
 ```
