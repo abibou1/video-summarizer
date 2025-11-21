@@ -38,6 +38,8 @@ Thumbs.db
 # downloads
 transcripts/
 
+last_video_id.json
+
 # Node.js (if applicable)
 node_modules/
 npm-debug.log*
@@ -53,8 +55,8 @@ __pycache__/
 *.pyd
 *.env
 .env
-*.myenv
-myenv/
+*.venv
+venv/
 ENV/
 env/
 *.egg-info/
