@@ -14,11 +14,27 @@ LOGGER = logging.getLogger(__name__)
 
 
 class WhisperTranscriber:
+    """Wrapper around OpenAI Whisper that handles audio downloads and cleanup."""
+
     def __init__(self, config: Config):
+        """Initialize the transcriber with application configuration."""
+
         self.config = config
         self.client = OpenAI(api_key=config.openai_api_key)
 
     def download_audio(self, video_id: str) -> Path:
+        """Download the YouTube video's audio track as an intermediate file.
+
+        Args:
+            video_id: Identifier of the YouTube video.
+
+        Returns:
+            Path pointing to the downloaded media file.
+
+        Raises:
+            RuntimeError: If youtube-dl is unable to download the video.
+
+        """
         url = f"https://www.youtube.com/watch?v={video_id}"
         output_template = str(self.config.downloads_dir / f"{video_id}.%(ext)s")
 
@@ -30,14 +46,32 @@ class WhisperTranscriber:
             "outtmpl": output_template,
         }
 
-        with YoutubeDL(ydl_opts) as ydl:
-            info = ydl.extract_info(url, download=True)
-            downloaded = Path(ydl.prepare_filename(info))
+        try:
+            with YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=True)
+                downloaded = Path(ydl.prepare_filename(info))
+        except Exception as exc:  # noqa: BLE001
+            raise RuntimeError(f"Failed to download audio for {video_id}") from exc
         return downloaded
 
     def transcribe(
         self, video_id: str, title: Optional[str] = None, write_file: bool = True
     ) -> Tuple[str, Optional[Path]]:
+        """Transcribe a YouTube video via Whisper.
+
+        Args:
+            video_id: Identifier of the YouTube video.
+            title: Optional human-readable title used for filename sanitization.
+            write_file: Persist transcript to disk when ``True``.
+
+        Returns:
+            Transcript text alongside the optional output file path.
+
+        Example:
+            >>> transcriber = WhisperTranscriber(config)
+            >>> text, path = transcriber.transcribe("dQw4w9WgXcQ")
+
+        """
         audio_path = self.download_audio(video_id)
         try:
             with audio_path.open("rb") as audio_file:

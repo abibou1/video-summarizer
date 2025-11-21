@@ -12,13 +12,19 @@ LOGGER = logging.getLogger(__name__)
 
 
 class YouTubePoller:
+    """Utility that resolves channel metadata and fetches the latest upload."""
+
     def __init__(self, config: Config):
+        """Initialize the poller with an authenticated YouTube client."""
+
         self.config = config
         self.client = build("youtube", "v3", developerKey=config.youtube_api_key)
         self._channel_id: Optional[str] = None
         self._uploads_playlist: Optional[str] = None
 
     def _resolve_channel_id(self) -> str:
+        """Convert a channel handle to a channel id via the Search API."""
+
         if self._channel_id:
             return self._channel_id
         handle = self.config.youtube_channel_handle.lstrip("@")
@@ -40,6 +46,8 @@ class YouTubePoller:
         return self._channel_id
 
     def _resolve_uploads_playlist(self) -> str:
+        """Locate the uploads playlist that contains recent channel videos."""
+
         if self._uploads_playlist:
             return self._uploads_playlist
         channel_id = self._resolve_channel_id()
@@ -60,6 +68,8 @@ class YouTubePoller:
         return self._uploads_playlist
 
     def fetch_latest_video(self) -> Optional[Dict[str, str]]:
+        """Return metadata for the most recent upload if available."""
+
         playlist_id = self._resolve_uploads_playlist()
         try:
             response = (

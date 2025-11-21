@@ -9,6 +9,8 @@ from dotenv import load_dotenv
 
 @dataclass
 class Config:
+    """Application configuration hydrated from environment variables."""
+
     youtube_api_key: str
     youtube_channel_handle: str
     openai_api_key: str
@@ -19,11 +21,22 @@ class Config:
     whisper_model: str = "whisper-1"
 
     def ensure_directories(self) -> None:
+        """Create download and transcript directories if they do not exist."""
+
         self.downloads_dir.mkdir(parents=True, exist_ok=True)
         self.transcripts_dir.mkdir(parents=True, exist_ok=True)
 
 
 def _load_state_file(path: Path) -> Optional[str]:
+    """Load the last processed video id from a JSON file.
+
+    Args:
+        path: Location of the JSON persistence file.
+
+    Returns:
+        The stored video id if available, otherwise ``None``.
+
+    """
     if not path.exists():
         return None
     try:
@@ -34,6 +47,20 @@ def _load_state_file(path: Path) -> Optional[str]:
 
 
 def load_config() -> Config:
+    """Load configuration from the environment and ensure necessary folders exist.
+
+    Returns:
+        A fully populated :class:`Config` instance.
+
+    Raises:
+        ValueError: If required environment variables are missing.
+
+    Example:
+        >>> config = load_config()
+        >>> config.downloads_dir.exists()
+        True
+
+    """
     load_dotenv()
 
     youtube_api_key = os.getenv("YOUTUBE_API_KEY")
@@ -75,10 +102,14 @@ def load_config() -> Config:
 
 
 def load_last_video_id(path: Path) -> Optional[str]:
+    """Return the last processed video id from disk."""
+
     return _load_state_file(path)
 
 
 def save_last_video_id(path: Path, video_id: str) -> None:
+    """Persist the last processed video id to disk."""
+
     data = {"last_video_id": video_id}
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 
