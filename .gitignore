@@ -35,7 +35,8 @@ Thumbs.db
 *.db
 *.tsv
 
-# downloads
+# data: audio and transcripts
+downloads/
 transcripts/
 
 last_video_id.json
