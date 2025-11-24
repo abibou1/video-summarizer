@@ -43,7 +43,6 @@ def config(tmp_path):
         youtube_channel_handle="@handle",
         openai_api_key="openai",
         downloads_dir=tmp_path / "downloads",
-        transcripts_dir=tmp_path / "transcripts",
         state_file=tmp_path / "state.json",
         email_enabled=True,
         smtp_port=587,

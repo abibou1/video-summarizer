@@ -49,7 +49,7 @@ class EmailService:
         """Send the summary email and log delivery status."""
 
         if not self.config.email_enabled:
-            LOGGER.debug("Email delivery disabled; skipping SMTP send.")
+            LOGGER.warning("Email delivery disabled; skipping SMTP send.")
             return
 
         assert self.config.smtp_sender is not None
@@ -60,14 +60,46 @@ class EmailService:
 
         assert self.config.smtp_password is not None
 
+        LOGGER.info("Connecting to SMTP server %s:%d", host, port)
         try:
             with smtplib.SMTP(host, port, timeout=30) as client:
+                LOGGER.debug("SMTP connection established, starting TLS")
                 client.starttls()
+                LOGGER.debug("TLS started, attempting login as %s", self.config.smtp_sender)
                 client.login(self.config.smtp_sender, self.config.smtp_password)
+                LOGGER.debug("Login successful, sending message")
                 client.send_message(message)
+                LOGGER.debug("Message sent successfully")
+        except smtplib.SMTPAuthenticationError as exc:
+            LOGGER.error(
+                "SMTP authentication failed. Check username (%s) and password.",
+                self.config.smtp_sender,
+            )
+            raise RuntimeError("SMTP authentication failed.") from exc
+        except smtplib.SMTPRecipientsRefused as exc:
+            LOGGER.error(
+                "SMTP recipient refused: %s. Check recipient address.",
+                self.config.smtp_recipient,
+            )
+            raise RuntimeError("SMTP recipient refused.") from exc
+        except smtplib.SMTPServerDisconnected as exc:
+            LOGGER.error("SMTP server disconnected unexpectedly.")
+            raise RuntimeError("SMTP server disconnected.") from exc
         except smtplib.SMTPException as exc:
-            LOGGER.exception("Failed to send summary email.")
-            raise RuntimeError("SMTP delivery failed.") from exc
+            LOGGER.exception("SMTP error occurred: %s", exc)
+            raise RuntimeError(f"SMTP delivery failed: {exc}") from exc
+        except OSError as exc:
+            LOGGER.error(
+                "Network error connecting to SMTP server %s:%d: %s",
+                host,
+                port,
+                exc,
+            )
+            raise RuntimeError(f"Failed to connect to SMTP server: {exc}") from exc
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.exception("Unexpected error sending email: %s", exc)
+            raise RuntimeError(f"Unexpected error sending email: {exc}") from exc
+
         LOGGER.info(
             "Summary email delivered to %s for video '%s'.",
             self.config.smtp_recipient,

@@ -3,12 +3,11 @@ from __future__ import annotations
 import json
 import logging
 from dataclasses import dataclass
-from pathlib import Path
 from typing import Dict, Optional, TypedDict
 
 from openai import OpenAI
 
-from config import Config, load_last_video_metadata
+from config import Config
 
 LOGGER = logging.getLogger(__name__)
 
@@ -30,28 +29,6 @@ class TranscriptSummarizer:
     def __post_init__(self) -> None:
         if self.client is None:
             self.client = OpenAI(api_key=self.config.openai_api_key)
-
-    def load_latest_transcript_text(self) -> str:
-        """Load transcript text recorded in the persisted processing state."""
-
-        metadata = load_last_video_metadata(self.config.state_file)
-        transcript_path = metadata.get("last_transcript_path")
-        if not transcript_path:
-            raise FileNotFoundError(
-                "No transcript path stored in state; cannot summarize."
-            )
-        path = Path(transcript_path)
-        if not path.exists():
-            raise FileNotFoundError(
-                f"Transcript file {transcript_path} referenced in state was not found."
-            )
-        return path.read_text(encoding="utf-8")
-
-    def summarize_latest_transcript(self) -> SummaryBundle:
-        """Load the latest transcript and return structured summaries."""
-
-        transcript = self.load_latest_transcript_text()
-        return self.generate_summaries(transcript)
 
     def generate_summaries(self, transcript: str) -> SummaryBundle:
         """Call the LLM to obtain short and comprehensive summaries.

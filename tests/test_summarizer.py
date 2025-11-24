@@ -6,7 +6,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from config import Config, save_last_video_id
+from config import Config
 from summarizer import SummaryBundle, TranscriptSummarizer
 
 
@@ -37,14 +37,11 @@ class _FakeClient:
 @pytest.fixture()
 def config(tmp_path: Path) -> Config:
     state_file = tmp_path / "state.json"
-    transcripts_dir = tmp_path / "transcripts"
-    transcripts_dir.mkdir()
     return Config(
         youtube_api_key="key",
         youtube_channel_handle="@handle",
         openai_api_key="openai",
         downloads_dir=tmp_path / "downloads",
-        transcripts_dir=transcripts_dir,
         state_file=state_file,
     )
 
@@ -67,16 +64,4 @@ def test_generate_summaries_rejects_empty_input(config: Config) -> None:
     summarizer = TranscriptSummarizer(config=config, client=_FakeClient(payload))
     with pytest.raises(ValueError):
         summarizer.generate_summaries("   ")
-
-
-def test_loads_transcript_from_state(config: Config) -> None:
-    transcript_path = config.transcripts_dir / "video.txt"
-    transcript_path.write_text("content", encoding="utf-8")
-    save_last_video_id(config.state_file, "vid", transcript_path=transcript_path, title="title")
-    payload: SummaryBundle = {
-        "short_summary": "a",
-        "comprehensive_summary": "b",
-    }
-    summarizer = TranscriptSummarizer(config=config, client=_FakeClient(payload))
-    assert summarizer.load_latest_transcript_text() == "content"
 

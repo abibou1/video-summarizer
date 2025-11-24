@@ -42,38 +42,59 @@ def process_latest_video(
         return
 
     LOGGER.info("New video detected: %s", latest["title"])
-    transcript, transcript_path = transcriber.transcribe(
-        latest["video_id"], latest["title"]
-    )
+    transcript = transcriber.transcribe(latest["video_id"])
     save_last_video_id(
         state_file,
         latest["video_id"],
-        transcript_path=transcript_path,
         title=latest["title"],
     )
-    print(transcript)
-    if transcript_path:
-        LOGGER.info("Transcript saved to %s", transcript_path)
     LOGGER.debug("Transcript content:\n%s", transcript)
 
     summaries = None
     if summarizer:
         try:
-            summaries = summarizer.summarize_latest_transcript()
+            summaries = summarizer.generate_summaries(transcript)
             LOGGER.info("Generated summaries for %s", latest["title"])
+            # Print summaries to console
+            print("\n" + "=" * 80)
+            print(f"SUMMARIES FOR: {latest['title']}")
+            print("=" * 80)
+            print(f"\nSHORT SUMMARY:\n{summaries['short_summary']}\n")
+            print(f"\nCOMPREHENSIVE SUMMARY:\n{summaries['comprehensive_summary']}\n")
+            print("=" * 80 + "\n")
         except Exception as exc:  # noqa: BLE001
             LOGGER.exception("Failed to summarize transcript: %s", exc)
+    else:
+        LOGGER.warning("Summarizer not initialized. Email enabled: %s", email_service is not None)
 
     if email_service and summaries:
         try:
+            LOGGER.info(
+                "Attempting to send email to %s via SMTP (host inferred from %s)",
+                email_service.config.smtp_recipient,
+                email_service.config.smtp_sender,
+            )
             email_service.send_summary_email(latest["title"], summaries)
+            LOGGER.info("Email sent successfully")
         except Exception as exc:  # noqa: BLE001
             LOGGER.exception("Failed to send summary email: %s", exc)
+    elif email_service and not summaries:
+        LOGGER.warning("Email service available but no summaries to send")
+    elif not email_service:
+        LOGGER.debug("Email service not initialized (email_enabled may be False)")
 
 
 def run_once() -> None:
     """Execute a single poll-transcribe cycle."""
     config = load_config()
+    LOGGER.info("Email enabled: %s", config.email_enabled)
+    if config.email_enabled:
+        LOGGER.info(
+            "Email configuration - Sender: %s, Recipient: %s, Port: %d",
+            config.smtp_sender,
+            config.smtp_recipient,
+            config.smtp_port,
+        )
     poller = YouTubePoller(config)
     transcriber = WhisperTranscriber(config)
     summarizer = TranscriptSummarizer(config) if config.email_enabled else None
@@ -94,6 +115,14 @@ def run_loop(config: Config) -> None:
         config: Application configuration loaded from the environment.
 
     """
+    LOGGER.info("Email enabled: %s", config.email_enabled)
+    if config.email_enabled:
+        LOGGER.info(
+            "Email configuration - Sender: %s, Recipient: %s, Port: %d",
+            config.smtp_sender,
+            config.smtp_recipient,
+            config.smtp_port,
+        )
     poller = YouTubePoller(config)
     transcriber = WhisperTranscriber(config)
     summarizer = TranscriptSummarizer(config) if config.email_enabled else None

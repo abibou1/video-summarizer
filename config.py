@@ -16,7 +16,6 @@ class Config:
     openai_api_key: str
     poll_interval_seconds: int = 900
     downloads_dir: Path = Path("downloads")
-    transcripts_dir: Path = Path("transcripts")
     state_file: Path = Path("last_video_id.json")
     whisper_model: str = "whisper-1"
     summary_model: str = "gpt-4o-mini"
@@ -44,10 +43,9 @@ class Config:
             )
 
     def ensure_directories(self) -> None:
-        """Create download and transcript directories if they do not exist."""
+        """Create download directory if it does not exist."""
 
         self.downloads_dir.mkdir(parents=True, exist_ok=True)
-        self.transcripts_dir.mkdir(parents=True, exist_ok=True)
 
 
 def _load_state_file(path: Path) -> Dict[str, Any]:
@@ -106,7 +104,6 @@ def load_config() -> Config:
 
     poll_interval_seconds = int(os.getenv("POLL_INTERVAL_SECONDS", "900"))
     downloads_dir = Path(os.getenv("DOWNLOADS_DIR", "downloads"))
-    transcripts_dir = Path(os.getenv("TRANSCRIPTS_DIR", "transcripts"))
     state_file = Path(os.getenv("STATE_FILE", "last_video_id.json"))
     whisper_model = os.getenv("WHISPER_MODEL", "whisper-1")
     summary_model = os.getenv("SUMMARY_MODEL", "gpt-4o-mini")
@@ -122,7 +119,6 @@ def load_config() -> Config:
         openai_api_key=openai_api_key,
         poll_interval_seconds=poll_interval_seconds,
         downloads_dir=downloads_dir,
-        transcripts_dir=transcripts_dir,
         state_file=state_file,
         whisper_model=whisper_model,
         summary_model=summary_model,
@@ -143,27 +139,12 @@ def load_last_video_id(path: Path) -> Optional[str]:
     return _load_state_file(path).get("last_video_id")
 
 
-def load_last_video_metadata(path: Path) -> Dict[str, Optional[str]]:
-    """Return metadata about the last processed video/transcript."""
-
-    data = _load_state_file(path)
-    return {
-        "last_video_id": data.get("last_video_id"),
-        "last_video_title": data.get("last_video_title"),
-        "last_transcript_path": data.get("last_transcript_path"),
-    }
-
-
-def save_last_video_id(
-    path: Path, video_id: str, transcript_path: Optional[Path] = None, title: str = ""
-) -> None:
+def save_last_video_id(path: Path, video_id: str, title: str = "") -> None:
     """Persist the last processed video id and optional transcript metadata."""
 
     data: Dict[str, Any] = {
         "last_video_id": video_id,
         "last_video_title": title or "",
     }
-    if transcript_path:
-        data["last_transcript_path"] = str(transcript_path)
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 

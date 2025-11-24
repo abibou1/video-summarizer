@@ -1,6 +1,6 @@
 # YouTube Channel Transcription Automation
 
-This project polls a YouTube channel for new uploads, downloads the audio, and generates transcripts using OpenAI Whisper. The transcript is returned as a string and optionally saved as a `.txt` document for later download.
+This project polls a YouTube channel for new uploads, downloads the audio, and generates transcripts using OpenAI Whisper. The transcript stays in memory and is fed directly into the summarization/email pipeline.
 
 ## Requirements
 
@@ -26,7 +26,6 @@ Optional overrides:
 
 - `POLL_INTERVAL_SECONDS` (default `900`)
 - `DOWNLOADS_DIR` (default `downloads/`)
-- `TRANSCRIPTS_DIR` (default `transcripts/`)
 - `STATE_FILE` (default `last_video_id.json`)
 - `WHISPER_MODEL` (default `whisper-1`)
 - `SUMMARY_MODEL` (default `gpt-4o-mini`)
@@ -67,11 +66,11 @@ Run continuously on the configured interval:
 python main.py --mode loop
 ```
 
-If a new video is detected, the script downloads the audio, transcribes it via Whisper, prints log output, and saves the transcript under `transcripts/`. The last processed video ID is stored in `last_video_id.json` to avoid duplicate work. When email delivery is configured, the pipeline also loads the persisted transcript, requests both a concise and comprehensive summary from OpenAI, and emails the pair immediately.
+If a new video is detected, the script downloads the audio, transcribes it via Whisper, prints log output, and keeps the transcript in memory. The last processed video ID is stored in `last_video_id.json` to avoid duplicate work. When email delivery is configured, the pipeline immediately requests both a concise and comprehensive summary from OpenAI and emails the pair.
 
 ## Output
 
-The transcript text is returned from the transcriber and also saved as `<video-title>.txt` inside the transcripts directory, which can be shared or downloaded as needed. Adjust `TRANSCRIPTS_DIR` if you want to store the documents elsewhere. Summaries are generated on demand and emailed; no extra files are created.
+The transcript text is returned from the transcriber and used directly for summarization. Summaries are generated on demand and emailed; no transcript files are created.
 
 ## Testing
 
