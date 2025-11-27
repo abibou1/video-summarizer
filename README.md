@@ -2,6 +2,28 @@
 
 This project polls a YouTube channel for new uploads, downloads the audio, and generates transcripts using OpenAI Whisper. The transcript stays in memory and is fed directly into the summarization/email pipeline.
 
+## Project Structure
+
+```
+video-summarizer/
+├── src/                      # All source code
+│   ├── main.py               # Entry point
+│   ├── core/                 # Configuration and utilities
+│   │   └── config.py         # Application configuration
+│   └── services/             # Business logic
+│       ├── summarizer.py     # Transcript summarization
+│       ├── email_service.py  # Email delivery
+│       ├── transcriber.py    # Audio transcription
+│       └── youtube_poller.py # YouTube API integration
+├── tests/                    # Test suite
+│   ├── unit/                 # Unit tests
+│   └── integration/         # Integration tests
+├── downloads/                # Temporary audio files (gitignored)
+├── config/                   # Configuration files
+├── scripts/                  # Utility scripts
+└── README.md
+```
+
 ## Requirements
 
 - Python 3.10+
@@ -57,13 +79,25 @@ POLL_INTERVAL_SECONDS=1800
 Run a single check for a new upload:
 
 ```bash
-python main.py --mode once
+python -m src.main --mode once
+```
+
+Or alternatively:
+
+```bash
+python src/main.py --mode once
 ```
 
 Run continuously on the configured interval:
 
 ```bash
-python main.py --mode loop
+python -m src.main --mode loop
+```
+
+Or alternatively:
+
+```bash
+python src/main.py --mode loop
 ```
 
 If a new video is detected, the script downloads the audio, transcribes it via Whisper, prints log output, and keeps the transcript in memory. The last processed video ID is stored in `last_video_id.json` to avoid duplicate work. When email delivery is configured, the pipeline immediately requests both a concise and comprehensive summary from OpenAI and emails the pair.
@@ -80,4 +114,32 @@ Run the automated test suite with:
 pytest
 ```
 
+Run only unit tests:
+
+```bash
+pytest tests/unit/
+```
+
+Run only integration tests:
+
+```bash
+pytest tests/integration/
+```
+
 The tests mock both OpenAI and SMTP so they run quickly without external dependencies.
+
+## Development
+
+This project follows a strict project structure as defined in `.cursorrules`:
+
+- All source code lives in `src/`
+- Business logic is organized in `src/services/`
+- Configuration and utilities are in `src/core/`
+- Tests are separated into `tests/unit/` and `tests/integration/`
+- No Python files are placed in the project root
+
+All code follows Python best practices with:
+- Comprehensive type annotations
+- Google-style docstrings
+- PEP 8 compliance (enforced with Ruff)
+- High test coverage (target 90%+)

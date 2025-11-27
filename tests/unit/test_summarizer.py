@@ -1,3 +1,4 @@
+# tests/unit/test_summarizer.py
 from __future__ import annotations
 
 import json
@@ -6,8 +7,8 @@ from types import SimpleNamespace
 
 import pytest
 
-from config import Config
-from summarizer import SummaryBundle, TranscriptSummarizer
+from src.core.config import Config
+from src.services.summarizer import SummaryBundle, TranscriptSummarizer
 
 
 class _FakeChoice:

@@ -1,3 +1,4 @@
+# src/services/email_service.py
 from __future__ import annotations
 
 import html
@@ -6,8 +7,8 @@ import smtplib
 from email.message import EmailMessage
 from typing import Tuple
 
-from config import Config
-from summarizer import SummaryBundle
+from src.core.config import Config
+from src.services.summarizer import SummaryBundle
 
 LOGGER = logging.getLogger(__name__)
 

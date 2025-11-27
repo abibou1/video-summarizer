@@ -1,3 +1,4 @@
+# tests/unit/test_email_service.py
 from __future__ import annotations
 
 import smtplib
@@ -5,9 +6,9 @@ from types import SimpleNamespace
 
 import pytest
 
-from config import Config
-from email_service import EmailService
-from summarizer import SummaryBundle
+from src.core.config import Config
+from src.services.email_service import EmailService
+from src.services.summarizer import SummaryBundle
 
 
 class _DummySMTP:

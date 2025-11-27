@@ -1,3 +1,4 @@
+# src/services/summarizer.py
 from __future__ import annotations
 
 import json
@@ -8,7 +9,7 @@ from typing import Dict, Optional, TypedDict
 
 from openai import OpenAI
 
-from config import Config
+from src.core.config import Config
 
 LOGGER = logging.getLogger(__name__)
 

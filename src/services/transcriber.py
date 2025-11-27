@@ -1,3 +1,4 @@
+# src/services/transcriber.py
 from __future__ import annotations
 
 import logging
@@ -8,7 +9,7 @@ from typing import Optional
 from openai import OpenAI
 from yt_dlp import YoutubeDL
 
-from config import Config
+from src.core.config import Config
 
 LOGGER = logging.getLogger(__name__)
 

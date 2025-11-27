@@ -1,3 +1,4 @@
+# src/main.py
 from __future__ import annotations
 
 import argparse
@@ -5,11 +6,11 @@ import logging
 import time
 from pathlib import Path
 
-from config import Config, load_config, load_last_video_id, save_last_video_id
-from email_service import EmailService
-from summarizer import TranscriptSummarizer
-from transcriber import WhisperTranscriber
-from youtube_poller import YouTubePoller
+from src.core.config import Config, load_config, load_last_video_id, save_last_video_id
+from src.services.email_service import EmailService
+from src.services.summarizer import TranscriptSummarizer
+from src.services.transcriber import WhisperTranscriber
+from src.services.youtube_poller import YouTubePoller
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOGGER = logging.getLogger(__name__)
