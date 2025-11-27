@@ -6,7 +6,7 @@ import logging
 import time
 from pathlib import Path
 
-from config import Config, load_config, load_last_video_id, save_last_video_id
+from config.config import Config, load_config, load_last_video_id, save_last_video_id
 from src.services.email_service import EmailService
 from src.services.summarizer import TranscriptSummarizer
 from src.services.transcriber import WhisperTranscriber

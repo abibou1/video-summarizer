@@ -36,7 +36,6 @@ You **MUST** organize every project with this exact folder layout:
 ```
 project_root/
 ├── src/                      # All source code lives here
-│   ├── __init__.py
 │   ├── main.py               # Entry point (FastAPI/Streamlit/Gradio)
 │   ├── api/                  # FastAPI routers, dependencies, Pydantic schemas (create when needed)
 │   ├── core/                 # Utils, custom exceptions, logging (NOT config)
@@ -51,8 +50,7 @@ project_root/
 ├── notebooks/                # Exploratory Jupyter notebooks (create when needed)
 ├── tests/                    # pytest tests (90%+ coverage required)
 │   ├── unit/
-│   ├── integration/          # (create when needed)
-│   └── __init__.py
+│   └── integration/          # (create when needed)
 ├── scripts/                  # One-off scripts (create when needed)
 ├── images/                   # Assets for README, diagrams, screenshots (create when needed)
 ├── static/                   # CSS/JS/images served by FastAPI or Streamlit (create when needed)
@@ -66,7 +64,9 @@ project_root/
 └── .cursorrules              # This file
 ```
 
-**Important:** The structure above shows the recommended organization, but folders should only be created when you actually need to place files in them. Do NOT create empty folders preemptively.
+**Important:** 
+- Folders should only be created when you actually need to place files in them. Do NOT create empty folders preemptively.
+- `__init__.py` files should only be created when actually needed (e.g., for package-level imports or exports). Do NOT create `__init__.py` files automatically in every directory.
 
 ## Strict File Placement Rules (NO exceptions)
 
@@ -80,6 +80,8 @@ project_root/
 - **FastAPI routers** → `src/api/`
 - **Configuration code and files** → `config/` (consolidated location for all config-related items)
 - **Create folders only when needed.** Do NOT create empty folders. Only create a folder when you are actually placing a file in it.
+- **`__init__.py` files:** Only create `__init__.py` when actually needed (e.g., for package-level imports/exports). Do NOT create `__init__.py` files automatically in every directory.
+- **Imports:** Import directly from the actual module files (e.g., `from config.config import Config`), not through package `__init__.py` re-exports unless there's a specific need for package-level convenience imports.
 - **At the top of every file, add:** `# src/services/my_agent.py` (or correct path) as a comment header.
 - **When showing multiple files, clearly label each with its full path.**
 

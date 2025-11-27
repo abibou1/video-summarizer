@@ -7,7 +7,7 @@ from types import SimpleNamespace
 
 import pytest
 
-from config import Config
+from config.config import Config
 from src.services.summarizer import SummaryBundle, TranscriptSummarizer
 
 

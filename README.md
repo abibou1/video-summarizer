@@ -20,7 +20,6 @@ video-summarizer/
 │   ├── unit/                 # Unit tests
 │   └── integration/         # Integration tests
 ├── downloads/                # Temporary audio files (gitignored)
-├── scripts/                  # Utility scripts
 └── README.md
 ```
 
