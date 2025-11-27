@@ -9,7 +9,7 @@ from typing import Optional
 from openai import OpenAI
 from yt_dlp import YoutubeDL
 
-from src.core.config import Config
+from config import Config
 
 LOGGER = logging.getLogger(__name__)
 

@@ -1,4 +1,4 @@
-# src/core/config.py
+# config/config.py
 import json
 import os
 from dataclasses import dataclass

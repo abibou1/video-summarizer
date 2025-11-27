@@ -38,44 +38,48 @@ project_root/
 ├── src/                      # All source code lives here
 │   ├── __init__.py
 │   ├── main.py               # Entry point (FastAPI/Streamlit/Gradio)
-│   ├── api/                  # FastAPI routers, dependencies, Pydantic schemas
-│   ├── core/                 # Config, utils, custom exceptions, logging
-│   ├── models/               # ML model wrappers, embeddings, Pydantic models
+│   ├── api/                  # FastAPI routers, dependencies, Pydantic schemas (create when needed)
+│   ├── core/                 # Utils, custom exceptions, logging (NOT config)
+│   ├── models/               # ML model wrappers, embeddings, Pydantic models (create when needed)
 │   ├── services/             # Business logic, LangChain chains, agents, tools
-│   ├── prompts/              # Prompt templates (.py constants or .txt)
-│   └── db/                   # Database/vector store helpers
-├── data/                     # Datasets (gitignored if large)
-│   ├── raw/
-│   ├── processed/
-│   └── external/
-├── notebooks/                # Exploratory Jupyter notebooks
+│   ├── prompts/              # Prompt templates (.py constants or .txt) (create when needed)
+│   └── db/                   # Database/vector store helpers (create when needed)
+├── data/                     # Datasets (gitignored if large, create subdirs when needed)
+│   ├── raw/                  # (create when needed)
+│   ├── processed/             # (create when needed)
+│   └── external/              # (create when needed)
+├── notebooks/                # Exploratory Jupyter notebooks (create when needed)
 ├── tests/                    # pytest tests (90%+ coverage required)
 │   ├── unit/
-│   ├── integration/
+│   ├── integration/          # (create when needed)
 │   └── __init__.py
-├── scripts/                  # One-off scripts (preprocessing, training, eval)
-├── images/                   # Assets for README, diagrams, screenshots
-├── static/                   # CSS/JS/images served by FastAPI or Streamlit
-├── config/                   # YAML/JSON configs, .env.example, Hydra configs
-├── docs/                     # Documentation & architecture diagrams
+├── scripts/                  # One-off scripts (create when needed)
+├── images/                   # Assets for README, diagrams, screenshots (create when needed)
+├── static/                   # CSS/JS/images served by FastAPI or Streamlit (create when needed)
+├── config/                   # ALL configuration: Python config code, YAML/JSON configs, .env.example, Hydra configs
+├── docs/                     # Documentation & architecture diagrams (create when needed)
 ├── .gitignore
 ├── pyproject.toml            # Poetry/Rye config
 ├── README.md
-├── Dockerfile
-├── docker-compose.yml        # optional
+├── Dockerfile                # (create when needed)
+├── docker-compose.yml        # (create when needed)
 └── .cursorrules              # This file
 ```
+
+**Important:** The structure above shows the recommended organization, but folders should only be created when you actually need to place files in them. Do NOT create empty folders preemptively.
 
 ## Strict File Placement Rules (NO exceptions)
 
 - **Never place .py files in the root.** All Python source code must be in `src/` or appropriate subdirectories.
+- **Exception: Configuration code** → `config/` (config.py, config loading logic)
 - **Never create app.py, utils.py, chain.py, agent.py, etc. at root level.** These belong in `src/` subdirectories.
 - **Prompts** → `src/prompts/`
 - **LangChain agents/chains/tools** → `src/services/`
 - **Tests** → `tests/unit/` or `tests/integration/`
 - **Data loading/preprocessing** → `scripts/`
 - **FastAPI routers** → `src/api/`
-- **Always create the folder first if it doesn't exist.**
+- **Configuration code and files** → `config/` (consolidated location for all config-related items)
+- **Create folders only when needed.** Do NOT create empty folders. Only create a folder when you are actually placing a file in it.
 - **At the top of every file, add:** `# src/services/my_agent.py` (or correct path) as a comment header.
 - **When showing multiple files, clearly label each with its full path.**
 

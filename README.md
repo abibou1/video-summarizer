@@ -8,18 +8,18 @@ This project polls a YouTube channel for new uploads, downloads the audio, and g
 video-summarizer/
 ├── src/                      # All source code
 │   ├── main.py               # Entry point
-│   ├── core/                 # Configuration and utilities
-│   │   └── config.py         # Application configuration
+│   ├── core/                 # Utilities (exceptions, logging)
 │   └── services/             # Business logic
 │       ├── summarizer.py     # Transcript summarization
 │       ├── email_service.py  # Email delivery
 │       ├── transcriber.py    # Audio transcription
 │       └── youtube_poller.py # YouTube API integration
+├── config/                   # ALL configuration (code, templates, examples)
+│   └── config.py             # Application configuration code
 ├── tests/                    # Test suite
 │   ├── unit/                 # Unit tests
 │   └── integration/         # Integration tests
 ├── downloads/                # Temporary audio files (gitignored)
-├── config/                   # Configuration files
 ├── scripts/                  # Utility scripts
 └── README.md
 ```
@@ -134,9 +134,10 @@ This project follows a strict project structure as defined in `.cursorrules`:
 
 - All source code lives in `src/`
 - Business logic is organized in `src/services/`
-- Configuration and utilities are in `src/core/`
+- **All configuration (code, templates, examples) is consolidated in `config/`**
+- Utilities (exceptions, logging) are in `src/core/`
 - Tests are separated into `tests/unit/` and `tests/integration/`
-- No Python files are placed in the project root
+- No Python files are placed in the project root (except configuration code in `config/`)
 
 All code follows Python best practices with:
 - Comprehensive type annotations

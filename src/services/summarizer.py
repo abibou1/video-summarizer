@@ -9,7 +9,7 @@ from typing import Dict, Optional, TypedDict
 
 from openai import OpenAI
 
-from src.core.config import Config
+from config import Config
 
 LOGGER = logging.getLogger(__name__)
 
