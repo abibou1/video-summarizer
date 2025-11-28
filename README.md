@@ -49,7 +49,7 @@ Optional overrides:
 - `DOWNLOADS_DIR` (default `downloads/`)
 - `STATE_FILE` (default `last_video_id.json`)
 - `WHISPER_MODEL` (default `whisper-1`)
-- `SUMMARY_MODEL` (default `gpt-4o-mini`)
+- `SUMMARY_MODEL` (default `gpt-3.5-turbo`)
 
 ### Email summary delivery
 

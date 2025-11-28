@@ -143,8 +143,8 @@ class TranscriptSummarizer:
             ) from exc
 
         try:
-            short = parsed["short_summary"].strip()
-            comprehensive = parsed["comprehensive_summary"].strip()
+            short_raw = parsed["short_summary"]
+            comprehensive_raw = parsed["comprehensive_summary"]
         except KeyError as exc:
             LOGGER.error(
                 "Response missing required keys. Available keys: %s",
@@ -153,6 +153,29 @@ class TranscriptSummarizer:
             raise ValueError(
                 f"Model response missing summary keys: {str(exc)}"
             ) from exc
+
+        # Convert to string if the value is not already a string (e.g., dict, list)
+        if isinstance(short_raw, dict):
+            LOGGER.warning(
+                "short_summary is a dict, converting to JSON string. Value: %s",
+                short_raw,
+            )
+            short = json.dumps(short_raw, indent=2)
+        elif isinstance(short_raw, list):
+            short = " ".join(str(item) for item in short_raw)
+        else:
+            short = str(short_raw).strip()
+
+        if isinstance(comprehensive_raw, dict):
+            LOGGER.warning(
+                "comprehensive_summary is a dict, converting to JSON string. Value: %s",
+                comprehensive_raw,
+            )
+            comprehensive = json.dumps(comprehensive_raw, indent=2)
+        elif isinstance(comprehensive_raw, list):
+            comprehensive = " ".join(str(item) for item in comprehensive_raw)
+        else:
+            comprehensive = str(comprehensive_raw).strip()
 
         if not short or not comprehensive:
             raise ValueError("Summaries must not be empty.")
