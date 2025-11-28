@@ -99,6 +99,20 @@ Or alternatively:
 python src/main.py --mode loop
 ```
 
+Run in development mode with dummy transcript (skips video download and transcription):
+
+```bash
+python -m src.main --mode dev
+```
+
+Or alternatively:
+
+```bash
+python src/main.py --mode dev
+```
+
+The development mode reads a transcript from `data/transcript.txt` instead of downloading videos and creating transcripts. This is useful for testing the summarization and email pipeline without requiring YouTube API access or video downloads. The mode still generates summaries and sends emails if configured.
+
 If a new video is detected, the script downloads the audio, transcribes it via Whisper, prints log output, and keeps the transcript in memory. The last processed video ID is stored in `last_video_id.json` to avoid duplicate work. When email delivery is configured, the pipeline immediately requests both a concise and comprehensive summary from OpenAI and emails the pair.
 
 ## Output

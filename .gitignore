@@ -36,6 +36,7 @@ Thumbs.db
 *.tsv
 
 # data: audio and transcripts
+data/
 downloads/
 transcripts/
 
