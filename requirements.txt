@@ -2,4 +2,5 @@ google-api-python-client>=2.111.0
 python-dotenv>=1.0.0
 yt-dlp>=2023.11.16
 openai>=1.2.4
+pytest>=9.0.1
 

@@ -1,14 +1,15 @@
+# src/services/transcriber.py
 from __future__ import annotations
 
 import logging
 import os
 from pathlib import Path
-from typing import Optional, Tuple
+from typing import Optional
 
 from openai import OpenAI
 from yt_dlp import YoutubeDL
 
-from config import Config
+from config.config import Config
 
 LOGGER = logging.getLogger(__name__)
 
@@ -54,22 +55,18 @@ class WhisperTranscriber:
             raise RuntimeError(f"Failed to download audio for {video_id}") from exc
         return downloaded
 
-    def transcribe(
-        self, video_id: str, title: Optional[str] = None, write_file: bool = True
-    ) -> Tuple[str, Optional[Path]]:
+    def transcribe(self, video_id: str) -> str:
         """Transcribe a YouTube video via Whisper.
 
         Args:
             video_id: Identifier of the YouTube video.
-            title: Optional human-readable title used for filename sanitization.
-            write_file: Persist transcript to disk when ``True``.
 
         Returns:
-            Transcript text alongside the optional output file path.
+            Transcript text for the provided video.
 
         Example:
             >>> transcriber = WhisperTranscriber(config)
-            >>> text, path = transcriber.transcribe("dQw4w9WgXcQ")
+            >>> text = transcriber.transcribe("dQw4w9WgXcQ")
 
         """
         audio_path = self.download_audio(video_id)
@@ -90,11 +87,5 @@ class WhisperTranscriber:
             transcript_text
         )
 
-        transcript_path = None
-        if write_file:
-            safe_title = (title or video_id).replace("/", "_")
-            transcript_path = self.config.transcripts_dir / f"{safe_title}.txt"
-            transcript_path.write_text(transcript_str, encoding="utf-8")
-
-        return transcript_str, transcript_path
+        return transcript_str
 

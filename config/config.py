@@ -1,8 +1,9 @@
+# config/config.py
 import json
 import os
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
+from typing import Any, Dict, Optional
 
 from dotenv import load_dotenv
 
@@ -16,34 +17,55 @@ class Config:
     openai_api_key: str
     poll_interval_seconds: int = 900
     downloads_dir: Path = Path("downloads")
-    transcripts_dir: Path = Path("transcripts")
     state_file: Path = Path("last_video_id.json")
     whisper_model: str = "whisper-1"
+    summary_model: str = "gpt-4o-mini"
+    email_enabled: bool = False
+    smtp_port: int = 587
+    smtp_password: Optional[str] = None
+    smtp_sender: Optional[str] = None
+    smtp_recipient: Optional[str] = None
+
+    def require_email_settings(self) -> None:
+        """Validate SMTP configuration when email delivery is enabled."""
+
+        if not self.email_enabled:
+            return
+        required_fields = {
+            "smtp_password": self.smtp_password,
+            "smtp_sender": self.smtp_sender,
+            "smtp_recipient": self.smtp_recipient,
+        }
+        missing = [field for field, value in required_fields.items() if not value]
+        if missing:
+            raise ValueError(
+                "Email summaries enabled, but missing SMTP fields: "
+                + ", ".join(missing)
+            )
 
     def ensure_directories(self) -> None:
-        """Create download and transcript directories if they do not exist."""
+        """Create download directory if it does not exist."""
 
         self.downloads_dir.mkdir(parents=True, exist_ok=True)
-        self.transcripts_dir.mkdir(parents=True, exist_ok=True)
 
 
-def _load_state_file(path: Path) -> Optional[str]:
-    """Load the last processed video id from a JSON file.
+def _load_state_file(path: Path) -> Dict[str, Any]:
+    """Load persisted metadata about the last processed video.
 
     Args:
         path: Location of the JSON persistence file.
 
     Returns:
-        The stored video id if available, otherwise ``None``.
+        Deserialized JSON payload. Returns an empty dictionary when missing or invalid.
 
     """
     if not path.exists():
-        return None
+        return {}
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError:
-        return None
-    return data.get("last_video_id")
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def load_config() -> Config:
@@ -83,9 +105,14 @@ def load_config() -> Config:
 
     poll_interval_seconds = int(os.getenv("POLL_INTERVAL_SECONDS", "900"))
     downloads_dir = Path(os.getenv("DOWNLOADS_DIR", "downloads"))
-    transcripts_dir = Path(os.getenv("TRANSCRIPTS_DIR", "transcripts"))
     state_file = Path(os.getenv("STATE_FILE", "last_video_id.json"))
     whisper_model = os.getenv("WHISPER_MODEL", "whisper-1")
+    summary_model = os.getenv("SUMMARY_MODEL", "gpt-4o-mini")
+    email_enabled = os.getenv("EMAIL_SUMMARIES_ENABLED", "false").lower() == "true"
+    smtp_port = int(os.getenv("SMTP_PORT", "587"))
+    smtp_password = os.getenv("SMTP_PASSWORD")
+    smtp_sender = os.getenv("SMTP_SENDER")
+    smtp_recipient = os.getenv("SMTP_RECIPIENT")
 
     config = Config(
         youtube_api_key=youtube_api_key,
@@ -93,23 +120,32 @@ def load_config() -> Config:
         openai_api_key=openai_api_key,
         poll_interval_seconds=poll_interval_seconds,
         downloads_dir=downloads_dir,
-        transcripts_dir=transcripts_dir,
         state_file=state_file,
         whisper_model=whisper_model,
+        summary_model=summary_model,
+        email_enabled=email_enabled,
+        smtp_port=smtp_port,
+        smtp_password=smtp_password,
+        smtp_sender=smtp_sender,
+        smtp_recipient=smtp_recipient,
     )
     config.ensure_directories()
+    config.require_email_settings()
     return config
 
 
 def load_last_video_id(path: Path) -> Optional[str]:
     """Return the last processed video id from disk."""
 
-    return _load_state_file(path)
+    return _load_state_file(path).get("last_video_id")
 
 
-def save_last_video_id(path: Path, video_id: str) -> None:
-    """Persist the last processed video id to disk."""
+def save_last_video_id(path: Path, video_id: str, title: str = "") -> None:
+    """Persist the last processed video id and optional transcript metadata."""
 
-    data = {"last_video_id": video_id}
+    data: Dict[str, Any] = {
+        "last_video_id": video_id,
+        "last_video_title": title or "",
+    }
     path.write_text(json.dumps(data, indent=2), encoding="utf-8")
 

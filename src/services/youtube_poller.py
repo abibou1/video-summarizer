@@ -1,3 +1,4 @@
+# src/services/youtube_poller.py
 from __future__ import annotations
 
 import logging
@@ -6,7 +7,7 @@ from typing import Dict, Optional
 from googleapiclient.discovery import build
 from googleapiclient.errors import HttpError
 
-from config import Config
+from config.config import Config
 
 LOGGER = logging.getLogger(__name__)
 
