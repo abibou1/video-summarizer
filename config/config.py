@@ -14,12 +14,15 @@ class Config:
 
     youtube_api_key: str
     youtube_channel_handle: str
-    openai_api_key: str
+    openai_api_key: Optional[str] = None
     poll_interval_seconds: int = 900
     downloads_dir: Path = Path("downloads")
     state_file: Path = Path("last_video_id.json")
     whisper_model: str = "whisper-1"
-    summary_model: str = "gpt-3.5-turbo"
+    summary_model: str = "meta-llama/Llama-3.1-8B-Instruct"
+    hf_token: Optional[str] = None
+    use_quantization: bool = True
+    device: str = "auto"
     email_enabled: bool = False
     smtp_port: int = 587
     smtp_password: Optional[str] = None
@@ -94,7 +97,6 @@ def load_config() -> Config:
         for name, value in [
             ("YOUTUBE_API_KEY", youtube_api_key),
             ("YOUTUBE_CHANNEL_HANDLE", youtube_channel_handle),
-            ("OPENAI_API_KEY", openai_api_key),
         ]
         if not value
     ]
@@ -107,7 +109,10 @@ def load_config() -> Config:
     downloads_dir = Path(os.getenv("DOWNLOADS_DIR", "downloads"))
     state_file = Path(os.getenv("STATE_FILE", "last_video_id.json"))
     whisper_model = os.getenv("WHISPER_MODEL", "whisper-1")
-    summary_model = os.getenv("SUMMARY_MODEL", "gpt-3.5-turbo")
+    summary_model = os.getenv("SUMMARY_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
+    hf_token = os.getenv("HF_TOKEN")
+    use_quantization = os.getenv("USE_QUANTIZATION", "true").lower() == "true"
+    device = os.getenv("DEVICE", "auto")
     email_enabled = os.getenv("EMAIL_SUMMARIES_ENABLED", "false").lower() == "true"
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_password = os.getenv("SMTP_PASSWORD")
@@ -123,6 +128,9 @@ def load_config() -> Config:
         state_file=state_file,
         whisper_model=whisper_model,
         summary_model=summary_model,
+        hf_token=hf_token,
+        use_quantization=use_quantization,
+        device=device,
         email_enabled=email_enabled,
         smtp_port=smtp_port,
         smtp_password=smtp_password,

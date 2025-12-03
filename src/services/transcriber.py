@@ -18,9 +18,17 @@ class WhisperTranscriber:
     """Wrapper around OpenAI Whisper that handles audio downloads and cleanup."""
 
     def __init__(self, config: Config):
-        """Initialize the transcriber with application configuration."""
+        """Initialize the transcriber with application configuration.
 
+        Raises:
+            ValueError: If OpenAI API key is not provided (required for Whisper).
+        """
         self.config = config
+        if not config.openai_api_key:
+            raise ValueError(
+                "OpenAI API key is required for Whisper transcription. "
+                "Set OPENAI_API_KEY environment variable."
+            )
         self.client = OpenAI(api_key=config.openai_api_key)
 
     def download_audio(self, video_id: str) -> Path:
