@@ -19,7 +19,7 @@ class Config:
     downloads_dir: Path = Path("downloads")
     state_file: Path = Path("last_video_id.json")
     whisper_model: str = "whisper-1"
-    summary_model: str = "gpt-4o-mini"
+    summary_model: str = "gpt-3.5-turbo"
     email_enabled: bool = False
     smtp_port: int = 587
     smtp_password: Optional[str] = None
@@ -107,7 +107,7 @@ def load_config() -> Config:
     downloads_dir = Path(os.getenv("DOWNLOADS_DIR", "downloads"))
     state_file = Path(os.getenv("STATE_FILE", "last_video_id.json"))
     whisper_model = os.getenv("WHISPER_MODEL", "whisper-1")
-    summary_model = os.getenv("SUMMARY_MODEL", "gpt-4o-mini")
+    summary_model = os.getenv("SUMMARY_MODEL", "gpt-3.5-turbo")
     email_enabled = os.getenv("EMAIL_SUMMARIES_ENABLED", "false").lower() == "true"
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_password = os.getenv("SMTP_PASSWORD")
