@@ -21,8 +21,6 @@ class Config:
     whisper_model: str = "whisper-1"
     summary_model: str = "meta-llama/Llama-3.1-8B-Instruct"
     hf_token: Optional[str] = None
-    use_quantization: bool = True
-    device: str = "auto"
     email_enabled: bool = False
     smtp_port: int = 587
     smtp_password: Optional[str] = None
@@ -111,8 +109,6 @@ def load_config() -> Config:
     whisper_model = os.getenv("WHISPER_MODEL", "whisper-1")
     summary_model = os.getenv("SUMMARY_MODEL", "meta-llama/Llama-3.1-8B-Instruct")
     hf_token = os.getenv("HF_TOKEN")
-    use_quantization = os.getenv("USE_QUANTIZATION", "true").lower() == "true"
-    device = os.getenv("DEVICE", "auto")
     email_enabled = os.getenv("EMAIL_SUMMARIES_ENABLED", "false").lower() == "true"
     smtp_port = int(os.getenv("SMTP_PORT", "587"))
     smtp_password = os.getenv("SMTP_PASSWORD")
@@ -129,8 +125,6 @@ def load_config() -> Config:
         whisper_model=whisper_model,
         summary_model=summary_model,
         hf_token=hf_token,
-        use_quantization=use_quantization,
-        device=device,
         email_enabled=email_enabled,
         smtp_port=smtp_port,
         smtp_password=smtp_password,

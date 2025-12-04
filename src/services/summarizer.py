@@ -5,14 +5,9 @@ import json
 import logging
 import re
 from dataclasses import dataclass
-from typing import Any, Dict, Optional, TypedDict
+from typing import Dict, Optional, TypedDict
 
-import torch
-from transformers import (
-    AutoModelForCausalLM,
-    AutoTokenizer,
-    BitsAndBytesConfig,
-)
+from huggingface_hub import InferenceClient
 
 from config.config import Config
 
@@ -28,113 +23,38 @@ class SummaryBundle(TypedDict):
 
 @dataclass
 class TranscriptSummarizer:
-    """Generate multi-length summaries for saved transcripts using Hugging Face models."""
+    """Generate multi-length summaries for saved transcripts using Hugging Face Inference API."""
 
     config: Config
-    _model: Optional[AutoModelForCausalLM] = None
-    _tokenizer: Optional[AutoTokenizer] = None
+    _client: Optional[InferenceClient] = None
 
     def __post_init__(self) -> None:
-        """Initialize model and tokenizer lazily on first use."""
-        # Model will be loaded on first call to generate_summaries
+        """Initialize Inference API client lazily on first use."""
+        # Client will be initialized on first call to generate_summaries
         pass
 
-    def _load_model(self) -> tuple[AutoModelForCausalLM, AutoTokenizer]:
-        """Load the Hugging Face model and tokenizer.
+    def _get_client(self) -> InferenceClient:
+        """Get or create the Hugging Face Inference API client.
 
         Returns:
-            Tuple of (model, tokenizer) loaded from Hugging Face.
+            InferenceClient instance configured with the HF token.
 
-        Raises:
-            ValueError: If model loading fails or HF token is missing when required.
         """
-        if self._model is not None and self._tokenizer is not None:
-            return self._model, self._tokenizer
+        if self._client is not None:
+            return self._client
 
-        LOGGER.info("Loading model: %s", self.config.summary_model)
-
-        # Check if HF token is required (Llama models require authentication)
         if not self.config.hf_token:
-            LOGGER.warning(
-                "HF_TOKEN not set. Some models may require authentication. "
-                "Set HF_TOKEN environment variable if authentication fails."
-            )
-
-        # Determine device
-        if self.config.device == "auto":
-            device = "cuda" if torch.cuda.is_available() else "cpu"
-        else:
-            device = self.config.device
-
-        LOGGER.info("Using device: %s", device)
-
-        # Load tokenizer
-        try:
-            tokenizer = AutoTokenizer.from_pretrained(
-                self.config.summary_model,
-                token=self.config.hf_token,
-                trust_remote_code=True,
-            )
-            # Set pad token if not present
-            if tokenizer.pad_token is None:
-                tokenizer.pad_token = tokenizer.eos_token
-            tokenizer.padding_side = "right"
-        except Exception as exc:
             raise ValueError(
-                f"Failed to load tokenizer for {self.config.summary_model}: {str(exc)}"
-            ) from exc
-
-        # Configure quantization if enabled
-        quantization_config = None
-        if self.config.use_quantization:
-            try:
-                quantization_config = BitsAndBytesConfig(
-                    load_in_4bit=True,
-                    bnb_4bit_use_double_quant=True,
-                    bnb_4bit_quant_type="nf4",
-                    bnb_4bit_compute_dtype=torch.bfloat16,
-                )
-                LOGGER.info("Quantization enabled (4-bit)")
-            except Exception as exc:
-                LOGGER.warning(
-                    "Failed to configure quantization, loading model without it: %s",
-                    str(exc),
-                )
-                quantization_config = None
-
-        # Load model
-        try:
-            model_kwargs: Dict[str, Any] = {
-                "token": self.config.hf_token,
-                "trust_remote_code": True,
-                "device_map": "auto" if device == "cuda" else None,
-            }
-
-            if quantization_config:
-                model_kwargs["quantization_config"] = quantization_config
-            elif device == "cpu":
-                model_kwargs["torch_dtype"] = torch.float32
-            else:
-                model_kwargs["torch_dtype"] = torch.float16
-
-            model = AutoModelForCausalLM.from_pretrained(
-                self.config.summary_model, **model_kwargs
+                "HF_TOKEN is required for Hugging Face Inference API. "
+                "Set HF_TOKEN environment variable in your .env file."
             )
 
-            if device == "cpu" and not quantization_config:
-                model = model.to(device)
-
-            model.eval()  # Set to evaluation mode
-            LOGGER.info("Model loaded successfully")
-
-        except Exception as exc:
-            raise ValueError(
-                f"Failed to load model {self.config.summary_model}: {str(exc)}"
-            ) from exc
-
-        self._model = model
-        self._tokenizer = tokenizer
-        return model, tokenizer
+        self._client = InferenceClient(
+            model=self.config.summary_model,
+            token=self.config.hf_token,
+        )
+        LOGGER.info("Initialized Hugging Face Inference API client for model: %s", self.config.summary_model)
+        return self._client
 
     def generate_summaries(self, transcript: str) -> SummaryBundle:
         """Call the LLM to obtain short and comprehensive summaries.
@@ -153,11 +73,9 @@ class TranscriptSummarizer:
         if not normalized:
             raise ValueError("Transcript is empty; nothing to summarize.")
 
-        # Load model on first use
-        model, tokenizer = self._load_model()
-
+        client = self._get_client()
         prompt = self._build_prompt(normalized)
-        response = self._call_model(model, tokenizer, prompt)
+        response = self._call_model(client, prompt)
         return self._parse_response(response)
 
     def _build_prompt(self, transcript: str) -> str:
@@ -188,14 +106,11 @@ class TranscriptSummarizer:
 
         return prompt
 
-    def _call_model(
-        self, model: AutoModelForCausalLM, tokenizer: AutoTokenizer, prompt: str
-    ) -> str:
-        """Invoke the Hugging Face model to generate a summary.
+    def _call_model(self, client: InferenceClient, prompt: str) -> str:
+        """Invoke the Hugging Face Inference API to generate a summary.
 
         Args:
-            model: Loaded Hugging Face model.
-            tokenizer: Loaded tokenizer.
+            client: Hugging Face Inference API client.
             prompt: Formatted prompt string.
 
         Returns:
@@ -205,38 +120,42 @@ class TranscriptSummarizer:
             ValueError: If the response format is unexpected or empty.
         """
         try:
-            # Tokenize input
-            inputs = tokenizer(prompt, return_tensors="pt", truncation=True, max_length=4096)
+            LOGGER.info("Calling Hugging Face Inference API...")
+            response = client.text_generation(
+                prompt=prompt,
+                max_new_tokens=512,
+                temperature=0.2,
+                return_full_text=False,
+            )
 
-            # Move inputs to the same device as model
-            device = next(model.parameters()).device
-            inputs = {k: v.to(device) for k, v in inputs.items()}
-
-            # Generate response
-            with torch.no_grad():
-                outputs = model.generate(
-                    **inputs,
-                    max_new_tokens=512,
-                    temperature=0.2,
-                    do_sample=True,
-                    pad_token_id=tokenizer.pad_token_id,
-                    eos_token_id=tokenizer.eos_token_id,
-                    top_p=0.95,
-                )
-
-            # Decode response (skip the input tokens)
-            input_length = inputs["input_ids"].shape[1]
-            generated_tokens = outputs[0][input_length:]
-            response_text = tokenizer.decode(generated_tokens, skip_special_tokens=True)
-
-            if not response_text or not response_text.strip():
+            if not response or not response.strip():
                 raise ValueError("Model returned an empty response.")
 
-            return response_text.strip()
+            return response.strip()
 
         except Exception as exc:
-            LOGGER.error("Error during model generation: %s", str(exc))
-            raise ValueError(f"Model generation failed: {str(exc)}") from exc
+            error_str = str(exc)
+            LOGGER.error("Error during model generation: %s", error_str)
+
+            # Provide helpful error messages for common issues
+            if "401" in error_str or "Unauthorized" in error_str:
+                raise ValueError(
+                    "Authentication failed. Please check your HF_TOKEN in the .env file. "
+                    "Get your token from https://huggingface.co/settings/tokens"
+                ) from exc
+            elif "403" in error_str or "gated" in error_str.lower():
+                raise ValueError(
+                    f"Access denied to model '{self.config.summary_model}'. "
+                    f"Visit https://huggingface.co/{self.config.summary_model} to request access. "
+                    "Make sure your HF_TOKEN is set correctly."
+                ) from exc
+            elif "404" in error_str:
+                raise ValueError(
+                    f"Model '{self.config.summary_model}' not found. "
+                    "Please check the model name in your SUMMARY_MODEL configuration."
+                ) from exc
+
+            raise ValueError(f"Model generation failed: {error_str}") from exc
 
     def _extract_json_from_markdown(self, text: str) -> str:
         """Extract JSON from markdown code blocks if present.

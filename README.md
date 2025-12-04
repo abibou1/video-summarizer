@@ -28,8 +28,7 @@ video-summarizer/
 - Python 3.10+
 - A YouTube Data API key with read access
 - An OpenAI API key enabled for the Whisper (`whisper-1`) model (for transcription)
-- A Hugging Face account and access token (for Llama model access)
-- GPU recommended but not required (CPU inference supported with quantization)
+- A Hugging Face account and access token (for Inference API access)
 
 Install dependencies:
 
@@ -37,7 +36,7 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
-**Note:** The first run will download the Llama model (~16GB for full precision, ~4-5GB with quantization), which may take time depending on your internet connection.
+**Note:** Using the Hugging Face Inference API means models run on Hugging Face's servers, so no local model downloads are required. You'll only need your HF_TOKEN for authentication.
 
 ## Configuration
 
@@ -56,8 +55,6 @@ Set the following environment variables (a `.env` file is recommended):
 - `STATE_FILE` (default `last_video_id.json`)
 - `WHISPER_MODEL` (default `whisper-1`)
 - `SUMMARY_MODEL` (default `meta-llama/Llama-3.1-8B-Instruct`)
-- `USE_QUANTIZATION` (default `true`) – Enable 4-bit quantization for reduced memory usage
-- `DEVICE` (default `auto`) – Device to use: `auto`, `cpu`, or `cuda`
 
 ### Email summary delivery
 
@@ -79,10 +76,13 @@ If any of these are missing while email is enabled, the application will raise a
 3. Create a new token with "Read" permissions
 4. Copy the token and add it to your `.env` file as `HF_TOKEN`
 
-### GPU vs CPU
+### Inference API
 
-- **GPU (CUDA):** Faster inference, recommended for production use. Automatically detected if available.
-- **CPU:** Supported with quantization enabled (default). Slower but works on any machine. Set `USE_QUANTIZATION=true` for 4-bit quantization which reduces memory usage significantly.
+This project uses Hugging Face Inference API, which runs models on Hugging Face's servers. This means:
+- No local model downloads required (saves disk space)
+- No GPU/CPU configuration needed
+- Faster setup - just provide your HF_TOKEN
+- Models are automatically optimized on Hugging Face's infrastructure
 
 Example `.env`:
 
@@ -92,8 +92,6 @@ YOUTUBE_CHANNEL_HANDLE=@anyYoutubeChannel
 OPENAI_API_KEY=sk-...
 HF_TOKEN=hf_...
 POLL_INTERVAL_SECONDS=1800
-USE_QUANTIZATION=true
-DEVICE=auto
 ```
 
 ## Usage
@@ -162,7 +160,7 @@ Run only integration tests:
 pytest tests/integration/
 ```
 
-The tests mock both Hugging Face transformers and SMTP so they run quickly without external dependencies or model downloads.
+The tests mock both Hugging Face Inference API and SMTP so they run quickly without external dependencies or API calls.
 
 ## Development
 
