@@ -4,4 +4,5 @@ yt-dlp>=2023.11.16
 openai>=1.2.4
 huggingface_hub>=0.20.0
 pytest>=9.0.1
+youtube-transcript-api>=0.6.0
 

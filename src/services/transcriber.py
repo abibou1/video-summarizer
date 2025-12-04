@@ -8,6 +8,12 @@ from typing import Optional
 
 from openai import OpenAI
 from yt_dlp import YoutubeDL
+from youtube_transcript_api import (
+    NoTranscriptFound,
+    TranscriptsDisabled,
+    VideoUnavailable,
+    YouTubeTranscriptApi,
+)
 
 from config.config import Config
 
@@ -15,13 +21,17 @@ LOGGER = logging.getLogger(__name__)
 
 
 class WhisperTranscriber:
-    """Wrapper around OpenAI Whisper that handles audio downloads and cleanup."""
+    """Wrapper around OpenAI Whisper that handles audio downloads and cleanup.
+
+    Attempts to use YouTube transcripts first when available, falling back to
+    Whisper transcription when transcripts are unavailable.
+    """
 
     def __init__(self, config: Config):
         """Initialize the transcriber with application configuration.
 
         Raises:
-            ValueError: If OpenAI API key is not provided (required for Whisper).
+            ValueError: If OpenAI API key is not provided (required for Whisper fallback).
         """
         self.config = config
         if not config.openai_api_key:
@@ -30,6 +40,51 @@ class WhisperTranscriber:
                 "Set OPENAI_API_KEY environment variable."
             )
         self.client = OpenAI(api_key=config.openai_api_key)
+
+    def get_youtube_transcript(self, video_id: str) -> Optional[str]:
+        """Fetch transcript directly from YouTube if available.
+
+        Args:
+            video_id: Identifier of the YouTube video.
+
+        Returns:
+            Combined transcript text if available, None otherwise.
+
+        """
+        try:
+            transcript_list = YouTubeTranscriptApi.get_transcript(
+                video_id, languages=["en"]
+            )
+            # Combine all transcript entries into a single text string
+            transcript_text = " ".join([entry["text"] for entry in transcript_list])
+            LOGGER.info(
+                "Successfully retrieved YouTube transcript for video %s (%d entries)",
+                video_id,
+                len(transcript_list),
+            )
+            return transcript_text
+        except NoTranscriptFound:
+            LOGGER.warning(
+                "No transcript found for video %s, falling back to Whisper", video_id
+            )
+            return None
+        except TranscriptsDisabled:
+            LOGGER.warning(
+                "Transcripts disabled for video %s, falling back to Whisper", video_id
+            )
+            return None
+        except VideoUnavailable:
+            LOGGER.warning(
+                "Video %s is unavailable, falling back to Whisper", video_id
+            )
+            return None
+        except Exception as exc:  # noqa: BLE001
+            LOGGER.warning(
+                "Error fetching YouTube transcript for video %s: %s. Falling back to Whisper",
+                video_id,
+                exc,
+            )
+            return None
 
     def download_audio(self, video_id: str) -> Path:
         """Download the YouTube video's audio track as an intermediate file.
@@ -64,7 +119,10 @@ class WhisperTranscriber:
         return downloaded
 
     def transcribe(self, video_id: str) -> str:
-        """Transcribe a YouTube video via Whisper.
+        """Transcribe a YouTube video, using YouTube transcripts when available.
+
+        Attempts to fetch YouTube transcripts first. If unavailable, falls back
+        to Whisper transcription via OpenAI API.
 
         Args:
             video_id: Identifier of the YouTube video.
@@ -77,6 +135,14 @@ class WhisperTranscriber:
             >>> text = transcriber.transcribe("dQw4w9WgXcQ")
 
         """
+        # Try YouTube transcript first (no download required)
+        youtube_transcript = self.get_youtube_transcript(video_id)
+        if youtube_transcript is not None:
+            LOGGER.info("Using YouTube transcript for video %s", video_id)
+            return youtube_transcript
+
+        # Fall back to Whisper transcription
+        LOGGER.info("Using Whisper transcription for video %s", video_id)
         audio_path = self.download_audio(video_id)
         try:
             with audio_path.open("rb") as audio_file:
