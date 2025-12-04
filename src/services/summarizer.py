@@ -74,18 +74,18 @@ class TranscriptSummarizer:
             raise ValueError("Transcript is empty; nothing to summarize.")
 
         client = self._get_client()
-        prompt = self._build_prompt(normalized)
-        response = self._call_model(client, prompt)
+        system_message, user_message = self._build_messages(normalized)
+        response = self._call_model(client, system_message, user_message)
         return self._parse_response(response)
 
-    def _build_prompt(self, transcript: str) -> str:
-        """Construct the prompt in Llama 3.1 instruction format.
+    def _build_messages(self, transcript: str) -> tuple[str, str]:
+        """Build system and user messages for conversational API.
 
         Args:
             transcript: Full transcript text to summarize.
 
         Returns:
-            Formatted prompt string for Llama 3.1 model.
+            Tuple of (system_message, user_message).
         """
         system_message = (
             "You are a senior financial analyst who writes clear summaries for busy "
@@ -97,21 +97,15 @@ class TranscriptSummarizer:
 
         user_message = f"Transcript:\n{transcript}"
 
-        # Llama 3.1 instruction format
-        prompt = (
-            "<|begin_of_text|><|start_header_id|>system<|end_header_id|>\n\n"
-            f"{system_message}<|eot_id|><|start_header_id|>user<|end_header_id|>\n\n"
-            f"{user_message}<|eot_id|><|start_header_id|>assistant<|end_header_id|>\n\n"
-        )
+        return system_message, user_message
 
-        return prompt
-
-    def _call_model(self, client: InferenceClient, prompt: str) -> str:
-        """Invoke the Hugging Face Inference API to generate a summary.
+    def _call_model(self, client: InferenceClient, system_message: str, user_message: str) -> str:
+        """Invoke the Hugging Face Inference API to generate a summary using conversational format.
 
         Args:
             client: Hugging Face Inference API client.
-            prompt: Formatted prompt string.
+            system_message: System prompt message.
+            user_message: User prompt message.
 
         Returns:
             The raw response content from the model.
@@ -120,18 +114,34 @@ class TranscriptSummarizer:
             ValueError: If the response format is unexpected or empty.
         """
         try:
-            LOGGER.info("Calling Hugging Face Inference API...")
-            response = client.text_generation(
-                prompt=prompt,
-                max_new_tokens=512,
+            LOGGER.info("Calling Hugging Face Inference API (conversational)...")
+            
+            # Use chat_completion for conversational models
+            response = client.chat_completion(
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_message},
+                ],
+                max_tokens=512,
                 temperature=0.2,
-                return_full_text=False,
             )
 
-            if not response or not response.strip():
+            # Extract content from response
+            if hasattr(response, 'choices') and len(response.choices) > 0:
+                content = response.choices[0].message.content
+            elif isinstance(response, dict):
+                # Handle dict response format
+                content = response.get('choices', [{}])[0].get('message', {}).get('content', '')
+            elif isinstance(response, str):
+                content = response
+            else:
+                # Try to get content attribute directly
+                content = getattr(response, 'content', str(response))
+
+            if not content or not content.strip():
                 raise ValueError("Model returned an empty response.")
 
-            return response.strip()
+            return content.strip()
 
         except Exception as exc:
             error_str = str(exc)
@@ -153,6 +163,11 @@ class TranscriptSummarizer:
                 raise ValueError(
                     f"Model '{self.config.summary_model}' not found. "
                     "Please check the model name in your SUMMARY_MODEL configuration."
+                ) from exc
+            elif "conversational" in error_str.lower() or "text-generation" in error_str.lower():
+                raise ValueError(
+                    f"Model task mismatch: {error_str}. "
+                    "This model requires conversational API format."
                 ) from exc
 
             raise ValueError(f"Model generation failed: {error_str}") from exc
