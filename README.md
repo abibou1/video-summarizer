@@ -27,7 +27,8 @@ video-summarizer/
 
 - Python 3.10+
 - A YouTube Data API key with read access
-- An OpenAI API key enabled for the Whisper (`whisper-1`) model
+- An OpenAI API key enabled for the Whisper (`whisper-1`) model (for transcription)
+- A Hugging Face account and access token (for Inference API access)
 
 Install dependencies:
 
@@ -35,21 +36,25 @@ Install dependencies:
 pip install -r requirements.txt
 ```
 
+**Note:** Using the Hugging Face Inference API means models run on Hugging Face's servers, so no local model downloads are required. You'll only need your HF_TOKEN for authentication.
+
 ## Configuration
 
 Set the following environment variables (a `.env` file is recommended):
 
+**Required:**
 - `YOUTUBE_API_KEY` – provided key for the YouTube Data API
 - `YOUTUBE_CHANNEL_HANDLE` – channel handle such as `@anyYoutubeChannel`
-- `OPENAI_API_KEY` – OpenAI API key with Whisper access
+- `OPENAI_API_KEY` – OpenAI API key with Whisper access (for transcription)
+- `HF_TOKEN` – Hugging Face access token (required for Llama model access)
 
-Optional overrides:
+**Optional overrides:**
 
 - `POLL_INTERVAL_SECONDS` (default `900`)
 - `DOWNLOADS_DIR` (default `downloads/`)
 - `STATE_FILE` (default `last_video_id.json`)
 - `WHISPER_MODEL` (default `whisper-1`)
-- `SUMMARY_MODEL` (default `gpt-3.5-turbo`)
+- `SUMMARY_MODEL` (default `meta-llama/Llama-3.1-8B-Instruct`)
 
 ### Email summary delivery
 
@@ -64,12 +69,28 @@ The SMTP host is inferred from the sender domain (e.g., `sender@example.com` -> 
 
 If any of these are missing while email is enabled, the application will raise an error at startup to avoid silent misconfiguration.
 
+### Getting a Hugging Face Token
+
+1. Create a free account at [huggingface.co](https://huggingface.co)
+2. Go to Settings → Access Tokens
+3. Create a new token with "Read" permissions
+4. Copy the token and add it to your `.env` file as `HF_TOKEN`
+
+### Inference API
+
+This project uses Hugging Face Inference API, which runs models on Hugging Face's servers. This means:
+- No local model downloads required (saves disk space)
+- No GPU/CPU configuration needed
+- Faster setup - just provide your HF_TOKEN
+- Models are automatically optimized on Hugging Face's infrastructure
+
 Example `.env`:
 
 ```
 YOUTUBE_API_KEY=AIzaSy...
 YOUTUBE_CHANNEL_HANDLE=@anyYoutubeChannel
 OPENAI_API_KEY=sk-...
+HF_TOKEN=hf_...
 POLL_INTERVAL_SECONDS=1800
 ```
 
@@ -113,7 +134,7 @@ python src/main.py --mode dev
 
 The development mode reads a transcript from `data/transcript.txt` instead of downloading videos and creating transcripts. This is useful for testing the summarization and email pipeline without requiring YouTube API access or video downloads. The mode still generates summaries and sends emails if configured.
 
-If a new video is detected, the script downloads the audio, transcribes it via Whisper, prints log output, and keeps the transcript in memory. The last processed video ID is stored in `last_video_id.json` to avoid duplicate work. When email delivery is configured, the pipeline immediately requests both a concise and comprehensive summary from OpenAI and emails the pair.
+If a new video is detected, the script downloads the audio, transcribes it via Whisper, prints log output, and keeps the transcript in memory. The last processed video ID is stored in `last_video_id.json` to avoid duplicate work. When email delivery is configured, the pipeline immediately requests both a concise and comprehensive summary from the Llama model and emails the pair.
 
 ## Output
 
@@ -139,7 +160,7 @@ Run only integration tests:
 pytest tests/integration/
 ```
 
-The tests mock both OpenAI and SMTP so they run quickly without external dependencies.
+The tests mock both Hugging Face Inference API and SMTP so they run quickly without external dependencies or API calls.
 
 ## Development
 

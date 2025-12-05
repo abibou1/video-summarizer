@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass
 from typing import Dict, Optional, TypedDict
 
-from openai import OpenAI
+from huggingface_hub import InferenceClient
 
 from config.config import Config
 
@@ -23,14 +23,38 @@ class SummaryBundle(TypedDict):
 
 @dataclass
 class TranscriptSummarizer:
-    """Generate multi-length summaries for saved transcripts."""
+    """Generate multi-length summaries for saved transcripts using Hugging Face Inference API."""
 
     config: Config
-    client: Optional[OpenAI] = None
+    _client: Optional[InferenceClient] = None
 
     def __post_init__(self) -> None:
-        if self.client is None:
-            self.client = OpenAI(api_key=self.config.openai_api_key)
+        """Initialize Inference API client lazily on first use."""
+        # Client will be initialized on first call to generate_summaries
+        pass
+
+    def _get_client(self) -> InferenceClient:
+        """Get or create the Hugging Face Inference API client.
+
+        Returns:
+            InferenceClient instance configured with the HF token.
+
+        """
+        if self._client is not None:
+            return self._client
+
+        if not self.config.hf_token:
+            raise ValueError(
+                "HF_TOKEN is required for Hugging Face Inference API. "
+                "Set HF_TOKEN environment variable in your .env file."
+            )
+
+        self._client = InferenceClient(
+            model=self.config.summary_model,
+            token=self.config.hf_token,
+        )
+        LOGGER.info("Initialized Hugging Face Inference API client for model: %s", self.config.summary_model)
+        return self._client
 
     def generate_summaries(self, transcript: str) -> SummaryBundle:
         """Call the LLM to obtain short and comprehensive summaries.
@@ -49,25 +73,39 @@ class TranscriptSummarizer:
         if not normalized:
             raise ValueError("Transcript is empty; nothing to summarize.")
 
-        prompt = self._build_prompt(normalized)
-        response = self._call_model(prompt)
+        client = self._get_client()
+        system_message, user_message = self._build_messages(normalized)
+        response = self._call_model(client, system_message, user_message)
         return self._parse_response(response)
 
-    def _build_prompt(self, transcript: str) -> str:
-        """Construct the user prompt instructing the LLM how to summarize."""
+    def _build_messages(self, transcript: str) -> tuple[str, str]:
+        """Build system and user messages for conversational API.
 
-        return (
+        Args:
+            transcript: Full transcript text to summarize.
+
+        Returns:
+            Tuple of (system_message, user_message).
+        """
+        system_message = (
             "You are a senior financial analyst who writes clear summaries for busy "
             "executives. Produce a JSON object with keys 'short_summary' (<=80 words) "
             "and 'comprehensive_summary' (3-5 paragraphs with actionable insights). "
             "Keep factual accuracy high, avoid speculation, and mention key numbers "
-            "when present. Return only valid JSON without any markdown formatting.\n\n"
-            "Transcript:\n"
-            f"{transcript}"
+            "when present. Return only valid JSON without any markdown formatting."
         )
 
-    def _call_model(self, prompt: str) -> str:
-        """Invoke the OpenAI Chat Completions API.
+        user_message = f"Transcript:\n{transcript}"
+
+        return system_message, user_message
+
+    def _call_model(self, client: InferenceClient, system_message: str, user_message: str) -> str:
+        """Invoke the Hugging Face Inference API to generate a summary using conversational format.
+
+        Args:
+            client: Hugging Face Inference API client.
+            system_message: System prompt message.
+            user_message: User prompt message.
 
         Returns:
             The raw response content from the model.
@@ -75,26 +113,64 @@ class TranscriptSummarizer:
         Raises:
             ValueError: If the response format is unexpected or empty.
         """
-        assert self.client is not None  # Defensive for type-checkers
-        completion = self.client.chat.completions.create(
-            model=self.config.summary_model,
-            temperature=0.2,
-            response_format={"type": "json_object"},
-            messages=[
-                {
-                    "role": "system",
-                    "content": "You convert transcripts into structured summaries. Always return valid JSON.",
-                },
-                {"role": "user", "content": prompt},
-            ],
-        )
         try:
-            content = completion.choices[0].message.content
-            if not content:
+            LOGGER.info("Calling Hugging Face Inference API (conversational)...")
+            
+            # Use chat_completion for conversational models
+            response = client.chat_completion(
+                messages=[
+                    {"role": "system", "content": system_message},
+                    {"role": "user", "content": user_message},
+                ],
+                max_tokens=512,
+                temperature=0.2,
+            )
+
+            # Extract content from response
+            if hasattr(response, 'choices') and len(response.choices) > 0:
+                content = response.choices[0].message.content
+            elif isinstance(response, dict):
+                # Handle dict response format
+                content = response.get('choices', [{}])[0].get('message', {}).get('content', '')
+            elif isinstance(response, str):
+                content = response
+            else:
+                # Try to get content attribute directly
+                content = getattr(response, 'content', str(response))
+
+            if not content or not content.strip():
                 raise ValueError("Model returned an empty response.")
-            return content
-        except (AttributeError, IndexError) as exc:  # pragma: no cover - defensive
-            raise ValueError("Model returned an unexpected response format.") from exc
+
+            return content.strip()
+
+        except Exception as exc:
+            error_str = str(exc)
+            LOGGER.error("Error during model generation: %s", error_str)
+
+            # Provide helpful error messages for common issues
+            if "401" in error_str or "Unauthorized" in error_str:
+                raise ValueError(
+                    "Authentication failed. Please check your HF_TOKEN in the .env file. "
+                    "Get your token from https://huggingface.co/settings/tokens"
+                ) from exc
+            elif "403" in error_str or "gated" in error_str.lower():
+                raise ValueError(
+                    f"Access denied to model '{self.config.summary_model}'. "
+                    f"Visit https://huggingface.co/{self.config.summary_model} to request access. "
+                    "Make sure your HF_TOKEN is set correctly."
+                ) from exc
+            elif "404" in error_str:
+                raise ValueError(
+                    f"Model '{self.config.summary_model}' not found. "
+                    "Please check the model name in your SUMMARY_MODEL configuration."
+                ) from exc
+            elif "conversational" in error_str.lower() or "text-generation" in error_str.lower():
+                raise ValueError(
+                    f"Model task mismatch: {error_str}. "
+                    "This model requires conversational API format."
+                ) from exc
+
+            raise ValueError(f"Model generation failed: {error_str}") from exc
 
     def _extract_json_from_markdown(self, text: str) -> str:
         """Extract JSON from markdown code blocks if present.
@@ -130,6 +206,12 @@ class TranscriptSummarizer:
 
         # Try to extract JSON from markdown code blocks if present
         cleaned_text = self._extract_json_from_markdown(response_text)
+
+        # Sometimes the model may include extra text before/after JSON
+        # Try to find JSON object in the text
+        json_match = re.search(r"\{.*\}", cleaned_text, re.DOTALL)
+        if json_match:
+            cleaned_text = json_match.group(0)
 
         try:
             parsed: Dict[str, str] = json.loads(cleaned_text)
@@ -183,4 +265,3 @@ class TranscriptSummarizer:
             short_summary=short,
             comprehensive_summary=comprehensive,
         )
-

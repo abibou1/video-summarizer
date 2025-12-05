@@ -3,7 +3,7 @@ from __future__ import annotations
 
 import json
 from pathlib import Path
-from types import SimpleNamespace
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -11,32 +11,9 @@ from config.config import Config
 from src.services.summarizer import SummaryBundle, TranscriptSummarizer
 
 
-class _FakeChoice:
-    def __init__(self, content: str):
-        self.message = SimpleNamespace(content=content)
-
-
-class _FakeChat:
-    def __init__(self, response_text: str):
-        self._response_text = response_text
-        self.last_kwargs = None
-
-    def completions(self) -> None:  # pragma: no cover - placeholder
-        raise NotImplementedError
-
-    def create(self, **kwargs):
-        self.last_kwargs = kwargs
-        return SimpleNamespace(choices=[_FakeChoice(self._response_text)])
-
-
-class _FakeClient:
-    def __init__(self, response_payload: SummaryBundle):
-        response_text = json.dumps(response_payload)
-        self.chat = SimpleNamespace(completions=_FakeChat(response_text))
-
-
 @pytest.fixture()
 def config(tmp_path: Path) -> Config:
+    """Create a test configuration."""
     state_file = tmp_path / "state.json"
     return Config(
         youtube_api_key="key",
@@ -44,25 +21,94 @@ def config(tmp_path: Path) -> Config:
         openai_api_key="openai",
         downloads_dir=tmp_path / "downloads",
         state_file=state_file,
+        summary_model="test-model",
+        hf_token="test-token",
     )
 
 
-def test_generate_summaries_parses_json(config: Config) -> None:
+@patch("src.services.summarizer.InferenceClient")
+def test_generate_summaries_parses_json(
+    mock_client_class,
+    config: Config,
+) -> None:
+    """Test that generate_summaries correctly parses JSON response."""
     payload: SummaryBundle = {
         "short_summary": "Brief",
         "comprehensive_summary": "Detailed paragraph.",
     }
-    summarizer = TranscriptSummarizer(config=config, client=_FakeClient(payload))
+
+    # Mock InferenceClient
+    mock_client = MagicMock()
+    mock_client.text_generation.return_value = json.dumps(payload)
+    mock_client_class.return_value = mock_client
+
+    summarizer = TranscriptSummarizer(config=config)
     result = summarizer.generate_summaries("hello world")
+
     assert result == payload
+    assert mock_client_class.called
+    assert mock_client.text_generation.called
 
 
-def test_generate_summaries_rejects_empty_input(config: Config) -> None:
-    payload: SummaryBundle = {
-        "short_summary": "a",
-        "comprehensive_summary": "b",
-    }
-    summarizer = TranscriptSummarizer(config=config, client=_FakeClient(payload))
-    with pytest.raises(ValueError):
+@patch("src.services.summarizer.InferenceClient")
+def test_generate_summaries_rejects_empty_input(
+    mock_client_class,
+    config: Config,
+) -> None:
+    """Test that generate_summaries rejects empty input."""
+    mock_client = MagicMock()
+    mock_client_class.return_value = mock_client
+
+    summarizer = TranscriptSummarizer(config=config)
+    with pytest.raises(ValueError, match="empty"):
         summarizer.generate_summaries("   ")
 
+
+@patch("src.services.summarizer.InferenceClient")
+def test_client_initialization_caches_instance(
+    mock_client_class,
+    config: Config,
+) -> None:
+    """Test that InferenceClient is cached after first initialization."""
+    payload: SummaryBundle = {
+        "short_summary": "Brief",
+        "comprehensive_summary": "Detailed paragraph.",
+    }
+
+    mock_client = MagicMock()
+    mock_client.text_generation.return_value = json.dumps(payload)
+    mock_client_class.return_value = mock_client
+
+    summarizer = TranscriptSummarizer(config=config)
+
+    # First call - should initialize client
+    summarizer.generate_summaries("first call")
+    call_count_1 = mock_client_class.call_count
+
+    # Second call - should use cached client
+    summarizer.generate_summaries("second call")
+    call_count_2 = mock_client_class.call_count
+
+    # Should only be called once (cached)
+    assert call_count_1 == call_count_2 == 1
+
+
+@patch("src.services.summarizer.InferenceClient")
+def test_raises_error_when_hf_token_missing(
+    mock_client_class,
+    tmp_path: Path,
+) -> None:
+    """Test that error is raised when HF_TOKEN is not provided."""
+    config = Config(
+        youtube_api_key="key",
+        youtube_channel_handle="@handle",
+        openai_api_key="openai",
+        downloads_dir=tmp_path / "downloads",
+        state_file=tmp_path / "state.json",
+        summary_model="test-model",
+        hf_token=None,
+    )
+
+    summarizer = TranscriptSummarizer(config=config)
+    with pytest.raises(ValueError, match="HF_TOKEN is required"):
+        summarizer.generate_summaries("test transcript")

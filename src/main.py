@@ -3,8 +3,14 @@ from __future__ import annotations
 
 import argparse
 import logging
+import sys
 import time
 from pathlib import Path
+
+# Add project root to Python path to allow imports of config and src modules
+_project_root = Path(__file__).parent.parent
+if str(_project_root) not in sys.path:
+    sys.path.insert(0, str(_project_root))
 
 from config.config import Config, load_config, load_last_video_id, save_last_video_id
 from src.services.email_service import EmailService
