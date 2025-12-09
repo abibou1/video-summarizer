@@ -7,14 +7,18 @@ This project polls a YouTube channel for new uploads and generates transcripts u
 ```
 video-summarizer/
 ├── src/                      # All source code
-│   ├── main.py               # Entry point
+│   ├── main.py               # CLI entry point
+│   ├── lambda_handler.py     # AWS Lambda entry point
+│   ├── core/                 # Core utilities
+│   │   └── aws_services.py   # AWS SDK wrappers (S3, Secrets Manager)
 │   └── services/             # Business logic
 │       ├── summarizer.py     # Transcript summarization
 │       ├── email_service.py  # Email delivery
 │       ├── transcriber.py    # Audio transcription
 │       └── youtube_poller.py # YouTube API integration
 ├── config/                   # ALL configuration (code, templates, examples)
-│   └── config.py             # Application configuration code
+│   ├── config.py             # Application configuration code
+│   └── lambda_config.yaml    # EventBridge schedule configuration
 ├── tests/                    # Test suite
 │   └── unit/                 # Unit tests
 ├── data/                     # Data files (gitignored)
@@ -157,6 +161,244 @@ If a new video is detected, the script attempts to fetch the transcript directly
 ## Output
 
 The transcript text is returned from the transcriber and used directly for summarization. Summaries are generated on demand and emailed; no transcript files are created.
+
+## AWS Lambda Deployment
+
+This project can be deployed to AWS Lambda with EventBridge scheduling, S3 for state persistence, and AWS Secrets Manager for credential management.
+
+### Prerequisites
+
+- AWS account with appropriate permissions
+- AWS CLI configured with credentials
+- Python 3.10+ runtime (Lambda supports Python 3.10, 3.11, 3.12)
+
+### AWS Services Required
+
+1. **AWS Lambda**: Serverless function execution
+2. **Amazon EventBridge**: Scheduled triggers (replaces polling loop)
+3. **Amazon S3**: State file persistence (`last_video_id.json`)
+4. **AWS Secrets Manager**: Secure credential storage
+
+### Setup Instructions
+
+#### 1. Create S3 Bucket for State Storage
+
+```bash
+aws s3 mb s3://your-video-summarizer-state-bucket
+```
+
+The state file will be stored at: `s3://your-bucket-name/state/last_video_id.json`
+
+#### 2. Create Secrets Manager Secret
+
+Create a JSON secret in AWS Secrets Manager containing all sensitive credentials:
+
+```bash
+aws secretsmanager create-secret \
+  --name video-summarizer-credentials \
+  --secret-string '{
+    "YOUTUBE_API_KEY": "your-youtube-api-key",
+    "OPENAI_API_KEY": "your-openai-api-key",
+    "HF_TOKEN": "your-huggingface-token",
+    "SMTP_SENDER": "sender@example.com",
+    "SMTP_RECIPIENT": "recipient@example.com",
+    "SMTP_PASSWORD": "your-smtp-password"
+  }'
+```
+
+**Secret Structure:**
+```json
+{
+  "YOUTUBE_API_KEY": "...",
+  "OPENAI_API_KEY": "...",
+  "HF_TOKEN": "...",
+  "SMTP_SENDER": "...",
+  "SMTP_RECIPIENT": "...",
+  "SMTP_PASSWORD": "..."
+}
+```
+
+**Note:** Only include fields that are actually needed. For example, if email is disabled, you don't need SMTP fields.
+
+#### 3. Create Lambda Function
+
+Package the application:
+
+```bash
+# Install dependencies
+pip install -r requirements.txt -t package/
+
+# Copy source code
+cp -r src/ package/
+cp -r config/ package/
+
+# Create deployment package
+cd package && zip -r ../lambda-deployment.zip . && cd ..
+```
+
+Create the Lambda function:
+
+```bash
+aws lambda create-function \
+  --function-name video-summarizer \
+  --runtime python3.10 \
+  --role arn:aws:iam::YOUR_ACCOUNT_ID:role/lambda-execution-role \
+  --handler src.lambda_handler.lambda_handler \
+  --zip-file fileb://lambda-deployment.zip \
+  --timeout 900 \
+  --memory-size 1024 \
+  --environment Variables="{
+    \"AWS_REGION\": \"us-east-1\",
+    \"S3_STATE_BUCKET\": \"your-video-summarizer-state-bucket\",
+    \"SECRETS_MANAGER_SECRET_NAME\": \"video-summarizer-credentials\",
+    \"YOUTUBE_CHANNEL_HANDLE\": \"@yourChannelHandle\",
+    \"EMAIL_SUMMARIES_ENABLED\": \"true\",
+    \"SMTP_PORT\": \"587\"
+  }"
+```
+
+#### 4. Configure IAM Role Permissions
+
+The Lambda execution role needs the following permissions:
+
+**S3 Permissions:**
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "s3:GetObject",
+        "s3:PutObject"
+      ],
+      "Resource": "arn:aws:s3:::your-video-summarizer-state-bucket/state/*"
+    }
+  ]
+}
+```
+
+**Secrets Manager Permissions:**
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "secretsmanager:GetSecretValue"
+      ],
+      "Resource": "arn:aws:secretsmanager:REGION:ACCOUNT_ID:secret:video-summarizer-credentials-*"
+    }
+  ]
+}
+```
+
+**CloudWatch Logs Permissions:**
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "logs:CreateLogGroup",
+        "logs:CreateLogStream",
+        "logs:PutLogEvents"
+      ],
+      "Resource": "arn:aws:logs:*:*:*"
+    }
+  ]
+}
+```
+
+#### 5. Create EventBridge Rule
+
+Create an EventBridge rule to trigger the Lambda function on a schedule:
+
+```bash
+aws events put-rule \
+  --name video-summarizer-schedule \
+  --schedule-expression "rate(15 minutes)" \
+  --description "Trigger video transcription automation every 15 minutes"
+```
+
+Add Lambda as a target:
+
+```bash
+aws events put-targets \
+  --rule video-summarizer-schedule \
+  --targets "Id"="1","Arn"="arn:aws:lambda:REGION:ACCOUNT_ID:function:video-summarizer"
+```
+
+**Schedule Options:**
+- `rate(15 minutes)` - Every 15 minutes
+- `rate(1 hour)` - Every hour
+- `cron(0/15 * * * ? *)` - Every 15 minutes (cron format)
+- `cron(0 12 * * ? *)` - Daily at 12:00 PM UTC
+
+See `config/lambda_config.yaml` for schedule configuration details.
+
+### Lambda Environment Variables
+
+**Required:**
+- `AWS_REGION` - AWS region (e.g., `us-east-1`)
+- `S3_STATE_BUCKET` - S3 bucket name for state storage
+- `SECRETS_MANAGER_SECRET_NAME` - Name of the Secrets Manager secret
+- `YOUTUBE_CHANNEL_HANDLE` - Channel handle (e.g., `@yourChannelHandle`)
+
+**Optional:**
+- `EMAIL_SUMMARIES_ENABLED` - Enable email summaries (`true`/`false`, default: `false`)
+- `SMTP_PORT` - SMTP port (default: `587`)
+- `WHISPER_MODEL` - Whisper model name (default: `whisper-1`)
+- `SUMMARY_MODEL` - Summary model name (default: `meta-llama/Llama-3.1-8B-Instruct`)
+
+**Note:** All sensitive credentials (API keys, tokens, SMTP passwords) should be stored in Secrets Manager, not in environment variables.
+
+### Lambda Configuration Recommendations
+
+- **Timeout:** 900 seconds (15 minutes) - allows time for video downloads and transcription
+- **Memory:** 1024 MB - sufficient for audio downloads and processing
+- **Architecture:** x86_64 (default)
+
+### Monitoring
+
+Monitor the Lambda function via:
+- **CloudWatch Logs:** `/aws/lambda/video-summarizer`
+- **CloudWatch Metrics:** Function invocations, duration, errors
+- **Lambda Console:** Recent invocations and execution results
+
+### Local Testing
+
+Local development still works with `.env` files. The application automatically detects the environment:
+- **Local:** Uses `.env` file and local filesystem
+- **Lambda:** Uses Secrets Manager and S3
+
+To test locally with AWS services:
+
+```bash
+export AWS_REGION=us-east-1
+export S3_STATE_BUCKET=your-bucket-name
+export SECRETS_MANAGER_SECRET_NAME=video-summarizer-credentials
+python -m src.main --mode once
+```
+
+### Updating the Lambda Function
+
+To update the function code:
+
+```bash
+# Recreate deployment package
+pip install -r requirements.txt -t package/
+cp -r src/ package/
+cp -r config/ package/
+cd package && zip -r ../lambda-deployment.zip . && cd ..
+
+# Update function
+aws lambda update-function-code \
+  --function-name video-summarizer \
+  --zip-file fileb://lambda-deployment.zip
+```
 
 ## Testing
 
