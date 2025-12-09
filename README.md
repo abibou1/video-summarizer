@@ -25,6 +25,8 @@ video-summarizer/
 │   └── transcript.txt        # Dummy transcript for development mode
 ├── downloads/                # Temporary audio files (gitignored)
 ├── requirements.txt          # Python dependencies
+├── Dockerfile                # Docker image for Lambda deployment
+├── .dockerignore             # Docker build context exclusions
 └── README.md
 ```
 
@@ -118,16 +120,12 @@ POLL_INTERVAL_SECONDS=1800
 
 ## Usage
 
+### Local Development
+
 Run a single check for a new upload:
 
 ```bash
 python -m src.main --mode once
-```
-
-Or alternatively:
-
-```bash
-python src/main.py --mode once
 ```
 
 Run continuously on the configured interval:
@@ -136,31 +134,17 @@ Run continuously on the configured interval:
 python -m src.main --mode loop
 ```
 
-Or alternatively:
-
-```bash
-python src/main.py --mode loop
-```
-
 Run in development mode with dummy transcript (skips video download and transcription):
 
 ```bash
 python -m src.main --mode dev
 ```
 
-Or alternatively:
+Development mode reads a transcript from `data/transcript.txt` instead of downloading videos. This is useful for testing the summarization and email pipeline without requiring YouTube API access or video downloads.
 
-```bash
-python src/main.py --mode dev
-```
+### How It Works
 
-The development mode reads a transcript from `data/transcript.txt` instead of downloading videos and creating transcripts. This is useful for testing the summarization and email pipeline without requiring YouTube API access or video downloads. The mode still generates summaries and sends emails if configured.
-
-If a new video is detected, the script attempts to fetch the transcript directly from YouTube first. If no transcript is available, it downloads the audio and transcribes it via OpenAI Whisper. The transcript is kept in memory and printed to the console. The last processed video ID is stored in `last_video_id.json` to avoid duplicate work. When email delivery is configured, the pipeline immediately requests both a concise and comprehensive summary from the Llama model and emails the pair.
-
-## Output
-
-The transcript text is returned from the transcriber and used directly for summarization. Summaries are generated on demand and emailed; no transcript files are created.
+If a new video is detected, the script attempts to fetch the transcript directly from YouTube first. If no transcript is available, it downloads the audio and transcribes it via OpenAI Whisper. The transcript is kept in memory and used directly for summarization. The last processed video ID is stored to avoid duplicate work. When email delivery is configured, the pipeline generates both a concise and comprehensive summary and emails them.
 
 ## AWS Lambda Deployment
 
@@ -170,6 +154,7 @@ This project can be deployed to AWS Lambda with EventBridge scheduling, S3 for s
 
 - AWS account with appropriate permissions
 - AWS CLI configured with credentials
+- Docker installed and running (for container image deployment)
 - Python 3.10+ runtime (Lambda supports Python 3.10, 3.11, 3.12)
 
 ### AWS Services Required
@@ -350,7 +335,7 @@ aws lambda create-function \
 - No Docker required
 - Suitable for deployments up to 250MB (unzipped)
 
-**Note:** Container image deployment is recommended for this project due to the dependencies (yt-dlp, etc.) that may benefit from the container environment.
+**Note:** Container image deployment is recommended for this project due to dependencies (yt-dlp, etc.) that benefit from the container environment.
 
 #### 4. Configure IAM Role Permissions
 
@@ -470,13 +455,13 @@ See `config/lambda_config.yaml` for schedule configuration details.
 - `SECRETS_MANAGER_SECRET_NAME` - Name of the Secrets Manager secret
 - `YOUTUBE_CHANNEL_HANDLE` - Channel handle (e.g., `@yourChannelHandle`)
 
+**Note:** All sensitive credentials (API keys, tokens, SMTP passwords) must be stored in Secrets Manager, not in environment variables.
+
 **Optional:**
 - `EMAIL_SUMMARIES_ENABLED` - Enable email summaries (`true`/`false`, default: `false`)
 - `SMTP_PORT` - SMTP port (default: `587`)
 - `WHISPER_MODEL` - Whisper model name (default: `whisper-1`)
 - `SUMMARY_MODEL` - Summary model name (default: `meta-llama/Llama-3.1-8B-Instruct`)
-
-**Note:** All sensitive credentials (API keys, tokens, SMTP passwords) should be stored in Secrets Manager, not in environment variables.
 
 ### Lambda Configuration Recommendations
 
@@ -493,7 +478,50 @@ Monitor the Lambda function via:
 
 ### Local Testing
 
-Local development still works with `.env` files. The application automatically detects the environment:
+#### Testing Docker Container Locally
+
+Test the Docker container using the AWS Lambda Runtime Interface Emulator (included in the base image):
+
+**1. Build the Docker image:**
+
+```bash
+docker build -t video-summarizer:local .
+```
+
+**2. Run the container with environment variables:**
+
+```bash
+docker run -p 9000:8080 \
+  -e AWS_REGION=us-east-1 \
+  -e YOUTUBE_CHANNEL_HANDLE=@yourChannelHandle \
+  -e YOUTUBE_API_KEY=your-api-key \
+  -e OPENAI_API_KEY=your-openai-key \
+  video-summarizer:local
+```
+
+**3. Test with a sample event (in another terminal):**
+
+```bash
+curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" \
+  -d '{}'
+```
+
+Or use a test event file:
+
+```bash
+# Create test-event.json
+echo '{"version":"0","id":"test","detail-type":"Scheduled Event","source":"aws.events"}' > test-event.json
+
+# Invoke
+curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" \
+  -d @test-event.json
+```
+
+**Note:** For local testing with AWS services (S3/Secrets Manager), you'll need AWS credentials configured (via `-v ~/.aws:/root/.aws:ro` or environment variables).
+
+#### Testing with Local Environment
+
+Local development uses `.env` files. The application automatically detects the environment:
 - **Local:** Uses `.env` file and local filesystem
 - **Lambda:** Uses Secrets Manager and S3
 
@@ -556,7 +584,7 @@ The Dockerfile uses the official AWS Lambda Python base image:
 - **Handler:** `src.lambda_handler.lambda_handler`
 - **Working Directory:** `${LAMBDA_TASK_ROOT}` (set by base image)
 
-The `.dockerignore` file excludes unnecessary files to optimize build context size and build speed.
+The `.dockerignore` file excludes unnecessary files (cache, tests, docs) to optimize build context size and build speed.
 
 ## Testing
 
