@@ -220,7 +220,94 @@ aws secretsmanager create-secret \
 
 **Note:** Only include fields that are actually needed. For example, if email is disabled, you don't need SMTP fields.
 
-#### 3. Create Lambda Function
+#### 3. Deploy Lambda Function (Choose One Method)
+
+##### Method A: Container Image Deployment (Recommended)
+
+This method uses Docker to build a container image and deploy it to AWS Lambda via Amazon ECR.
+
+**Prerequisites:**
+- Docker installed and running
+- AWS CLI configured
+- ECR repository created
+
+**Step 1: Create ECR Repository**
+
+```bash
+aws ecr create-repository \
+  --repository-name video-summarizer \
+  --region us-east-1
+```
+
+**Step 2: Authenticate Docker to ECR**
+
+```bash
+aws ecr get-login-password --region us-east-1 | \
+  docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
+```
+
+**Step 3: Build Docker Image**
+
+```bash
+docker build -t video-summarizer .
+```
+
+**Step 4: Tag Image for ECR**
+
+```bash
+docker tag video-summarizer:latest \
+  <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
+```
+
+**Step 5: Push Image to ECR**
+
+```bash
+docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
+```
+
+**Step 6: Create Lambda Function from Container Image**
+
+```bash
+aws lambda create-function \
+  --function-name video-summarizer \
+  --package-type Image \
+  --code ImageUri=<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest \
+  --role arn:aws:iam::<ACCOUNT_ID>:role/lambda-execution-role \
+  --timeout 900 \
+  --memory-size 1024 \
+  --environment Variables="{
+    \"AWS_REGION\": \"us-east-1\",
+    \"S3_STATE_BUCKET\": \"your-video-summarizer-state-bucket\",
+    \"SECRETS_MANAGER_SECRET_NAME\": \"video-summarizer-credentials\",
+    \"YOUTUBE_CHANNEL_HANDLE\": \"@yourChannelHandle\",
+    \"EMAIL_SUMMARIES_ENABLED\": \"true\",
+    \"SMTP_PORT\": \"587\"
+  }"
+```
+
+**Step 7: Update Lambda Function Image (for updates)**
+
+```bash
+# Rebuild and push image
+docker build -t video-summarizer .
+docker tag video-summarizer:latest \
+  <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
+docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
+
+# Update Lambda function
+aws lambda update-function-code \
+  --function-name video-summarizer \
+  --image-uri <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
+```
+
+**Container Image Benefits:**
+- Larger deployment package size (up to 10GB)
+- More control over the runtime environment
+- Easier to include system dependencies
+- Better for complex dependencies
+- Consistent build environment
+
+##### Method B: ZIP Deployment Package
 
 Package the application:
 
@@ -256,6 +343,14 @@ aws lambda create-function \
     \"SMTP_PORT\": \"587\"
   }"
 ```
+
+**ZIP Deployment Benefits:**
+- Faster deployment cycles
+- Simpler for small applications
+- No Docker required
+- Suitable for deployments up to 250MB (unzipped)
+
+**Note:** Container image deployment is recommended for this project due to the dependencies (yt-dlp, etc.) that may benefit from the container environment.
 
 #### 4. Configure IAM Role Permissions
 
@@ -311,6 +406,34 @@ The Lambda execution role needs the following permissions:
   ]
 }
 ```
+
+**ECR Permissions (for Container Image Deployment):**
+
+If using container images, the IAM user/role used for deployment also needs ECR permissions:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Effect": "Allow",
+      "Action": [
+        "ecr:GetAuthorizationToken",
+        "ecr:BatchCheckLayerAvailability",
+        "ecr:GetDownloadUrlForLayer",
+        "ecr:BatchGetImage",
+        "ecr:PutImage",
+        "ecr:InitiateLayerUpload",
+        "ecr:UploadLayerPart",
+        "ecr:CompleteLayerUpload"
+      ],
+      "Resource": "*"
+    }
+  ]
+}
+```
+
+**Note:** The Lambda execution role itself does not need ECR permissions - only the role/user deploying the function.
 
 #### 5. Create EventBridge Rule
 
@@ -385,7 +508,33 @@ python -m src.main --mode once
 
 ### Updating the Lambda Function
 
-To update the function code:
+#### Container Image Method
+
+```bash
+# Rebuild and push image
+docker build -t video-summarizer .
+docker tag video-summarizer:latest \
+  <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
+docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
+
+# Update function (no need to update function code separately for images)
+# Lambda automatically uses the latest image tag
+```
+
+Alternatively, use a specific tag for versioning:
+
+```bash
+docker tag video-summarizer:latest \
+  <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:v1.2.3
+docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:v1.2.3
+
+# Update function to use specific tag
+aws lambda update-function-code \
+  --function-name video-summarizer \
+  --image-uri <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:v1.2.3
+```
+
+#### ZIP Deployment Method
 
 ```bash
 # Recreate deployment package
@@ -399,6 +548,15 @@ aws lambda update-function-code \
   --function-name video-summarizer \
   --zip-file fileb://lambda-deployment.zip
 ```
+
+### Docker Image Details
+
+The Dockerfile uses the official AWS Lambda Python base image:
+- **Base Image:** `public.ecr.aws/lambda/python:3.10`
+- **Handler:** `src.lambda_handler.lambda_handler`
+- **Working Directory:** `${LAMBDA_TASK_ROOT}` (set by base image)
+
+The `.dockerignore` file excludes unnecessary files to optimize build context size and build speed.
 
 ## Testing
 
