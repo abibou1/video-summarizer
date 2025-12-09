@@ -1,6 +1,6 @@
 # YouTube Channel Transcription Automation
 
-This project polls a YouTube channel for new uploads, downloads the audio, and generates transcripts using OpenAI Whisper. The transcript stays in memory and is fed directly into the summarization/email pipeline.
+This project polls a YouTube channel for new uploads and generates transcripts using YouTube's native transcripts when available, falling back to OpenAI Whisper when transcripts are unavailable. The transcript stays in memory and is fed directly into the summarization/email pipeline.
 
 ## Project Structure
 
@@ -8,7 +8,6 @@ This project polls a YouTube channel for new uploads, downloads the audio, and g
 video-summarizer/
 ├── src/                      # All source code
 │   ├── main.py               # Entry point
-│   ├── core/                 # Utilities (exceptions, logging)
 │   └── services/             # Business logic
 │       ├── summarizer.py     # Transcript summarization
 │       ├── email_service.py  # Email delivery
@@ -17,9 +16,11 @@ video-summarizer/
 ├── config/                   # ALL configuration (code, templates, examples)
 │   └── config.py             # Application configuration code
 ├── tests/                    # Test suite
-│   ├── unit/                 # Unit tests
-│   └── integration/         # Integration tests
+│   └── unit/                 # Unit tests
+├── data/                     # Data files (gitignored)
+│   └── transcript.txt        # Dummy transcript for development mode
 ├── downloads/                # Temporary audio files (gitignored)
+├── requirements.txt          # Python dependencies
 └── README.md
 ```
 
@@ -27,8 +28,8 @@ video-summarizer/
 
 - Python 3.10+
 - A YouTube Data API key with read access
-- An OpenAI API key enabled for the Whisper (`whisper-1`) model (for transcription)
-- A Hugging Face account and access token (for Inference API access)
+- An OpenAI API key enabled for the Whisper (`whisper-1`) model (for transcription fallback)
+- A Hugging Face account and access token (required only when email summaries are enabled)
 
 Install dependencies:
 
@@ -45,8 +46,10 @@ Set the following environment variables (a `.env` file is recommended):
 **Required:**
 - `YOUTUBE_API_KEY` – provided key for the YouTube Data API
 - `YOUTUBE_CHANNEL_HANDLE` – channel handle such as `@anyYoutubeChannel`
-- `OPENAI_API_KEY` – OpenAI API key with Whisper access (for transcription)
-- `HF_TOKEN` – Hugging Face access token (required for Llama model access)
+- `OPENAI_API_KEY` – OpenAI API key with Whisper access (required for transcription fallback when YouTube transcripts are unavailable)
+
+**Required when email summaries are enabled:**
+- `HF_TOKEN` – Hugging Face access token (required for Llama model access when `EMAIL_SUMMARIES_ENABLED=true`)
 
 **Optional overrides:**
 
@@ -58,8 +61,9 @@ Set the following environment variables (a `.env` file is recommended):
 
 ### Email summary delivery
 
-Set `EMAIL_SUMMARIES_ENABLED=true` to automatically summarize the most recent transcript and email both the short and comprehensive summaries via SMTP. When enabled, provide:
+Set `EMAIL_SUMMARIES_ENABLED=true` to automatically summarize the most recent transcript and email both the short and comprehensive summaries via SMTP. When enabled, you must also provide:
 
+- `HF_TOKEN` – Hugging Face access token (required for summarization)
 - `SMTP_SENDER`
 - `SMTP_RECIPIENT`
 - `SMTP_PASSWORD`
@@ -84,13 +88,27 @@ This project uses Hugging Face Inference API, which runs models on Hugging Face'
 - Faster setup - just provide your HF_TOKEN
 - Models are automatically optimized on Hugging Face's infrastructure
 
-Example `.env`:
+Example `.env` (basic configuration without email):
+
+```
+YOUTUBE_API_KEY=AIzaSy...
+YOUTUBE_CHANNEL_HANDLE=@anyYoutubeChannel
+OPENAI_API_KEY=sk-...
+POLL_INTERVAL_SECONDS=1800
+```
+
+Example `.env` (with email summaries enabled):
 
 ```
 YOUTUBE_API_KEY=AIzaSy...
 YOUTUBE_CHANNEL_HANDLE=@anyYoutubeChannel
 OPENAI_API_KEY=sk-...
 HF_TOKEN=hf_...
+EMAIL_SUMMARIES_ENABLED=true
+SMTP_SENDER=sender@example.com
+SMTP_RECIPIENT=recipient@example.com
+SMTP_PASSWORD=your_smtp_password
+SMTP_PORT=587
 POLL_INTERVAL_SECONDS=1800
 ```
 
@@ -134,7 +152,7 @@ python src/main.py --mode dev
 
 The development mode reads a transcript from `data/transcript.txt` instead of downloading videos and creating transcripts. This is useful for testing the summarization and email pipeline without requiring YouTube API access or video downloads. The mode still generates summaries and sends emails if configured.
 
-If a new video is detected, the script downloads the audio, transcribes it via Whisper, prints log output, and keeps the transcript in memory. The last processed video ID is stored in `last_video_id.json` to avoid duplicate work. When email delivery is configured, the pipeline immediately requests both a concise and comprehensive summary from the Llama model and emails the pair.
+If a new video is detected, the script attempts to fetch the transcript directly from YouTube first. If no transcript is available, it downloads the audio and transcribes it via OpenAI Whisper. The transcript is kept in memory and printed to the console. The last processed video ID is stored in `last_video_id.json` to avoid duplicate work. When email delivery is configured, the pipeline immediately requests both a concise and comprehensive summary from the Llama model and emails the pair.
 
 ## Output
 
@@ -154,13 +172,9 @@ Run only unit tests:
 pytest tests/unit/
 ```
 
-Run only integration tests:
-
-```bash
-pytest tests/integration/
-```
-
 The tests mock both Hugging Face Inference API and SMTP so they run quickly without external dependencies or API calls.
+
+**Note:** Integration tests can be added to `tests/integration/` when needed.
 
 ## Development
 
@@ -169,8 +183,7 @@ This project follows a strict project structure as defined in `.cursorrules`:
 - All source code lives in `src/`
 - Business logic is organized in `src/services/`
 - **All configuration (code, templates, examples) is consolidated in `config/`**
-- Utilities (exceptions, logging) are in `src/core/`
-- Tests are separated into `tests/unit/` and `tests/integration/`
+- Tests are organized in `tests/unit/` (integration tests can be added to `tests/integration/` when needed)
 - No Python files are placed in the project root (except configuration code in `config/`)
 
 All code follows Python best practices with:
