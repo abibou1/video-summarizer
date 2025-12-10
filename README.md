@@ -36,10 +36,12 @@ video-summarizer/
 - A YouTube Data API key with read access
 - An OpenAI API key enabled for the Whisper (`whisper-1`) model (for transcription fallback)
 - A Hugging Face account and access token (required only when email summaries are enabled)
+- **Windows Users:** PowerShell 5.1+ or Windows Terminal recommended for best experience
 
 Install dependencies:
 
-```bash
+**PowerShell/CMD:**
+```powershell
 pip install -r requirements.txt
 ```
 
@@ -124,19 +126,22 @@ POLL_INTERVAL_SECONDS=1800
 
 Run a single check for a new upload:
 
-```bash
+**PowerShell/CMD:**
+```powershell
 python -m src.main --mode once
 ```
 
 Run continuously on the configured interval:
 
-```bash
+**PowerShell/CMD:**
+```powershell
 python -m src.main --mode loop
 ```
 
 Run in development mode with dummy transcript (skips video download and transcription):
 
-```bash
+**PowerShell/CMD:**
+```powershell
 python -m src.main --mode dev
 ```
 
@@ -157,6 +162,8 @@ This project can be deployed to AWS Lambda with EventBridge scheduling, S3 for s
 - Docker installed and running (for container image deployment)
 - Python 3.10+ runtime (Lambda supports Python 3.10, 3.11, 3.12)
 
+**Windows Users:** All commands below are provided for both PowerShell (recommended) and CMD. PowerShell backticks (`` ` ``) are used for line continuation in PowerShell, while CMD uses `^` or single-line commands.
+
 ### AWS Services Required
 
 1. **AWS Lambda**: Serverless function execution
@@ -168,7 +175,13 @@ This project can be deployed to AWS Lambda with EventBridge scheduling, S3 for s
 
 #### 1. Create S3 Bucket for State Storage
 
-```bash
+**PowerShell:**
+```powershell
+aws s3 mb s3://your-video-summarizer-state-bucket
+```
+
+**CMD:**
+```cmd
 aws s3 mb s3://your-video-summarizer-state-bucket
 ```
 
@@ -178,9 +191,10 @@ The state file will be stored at: `s3://your-bucket-name/state/last_video_id.jso
 
 Create a JSON secret in AWS Secrets Manager containing all sensitive credentials:
 
-```bash
-aws secretsmanager create-secret \
-  --name video-summarizer-credentials \
+**PowerShell (recommended on Windows):**
+```powershell
+aws secretsmanager create-secret `
+  --name video-summarizer-credentials `
   --secret-string '{
     "YOUTUBE_API_KEY": "your-youtube-api-key",
     "OPENAI_API_KEY": "your-openai-api-key",
@@ -190,6 +204,16 @@ aws secretsmanager create-secret \
     "SMTP_PASSWORD": "your-smtp-password"
   }'
 ```
+
+**Alternative (using a JSON file):**
+```powershell
+aws secretsmanager create-secret `
+  --name video-summarizer-credentials `
+  --secret-string file://secret.json
+```
+
+**Note:** On Windows, use PowerShell backticks (`` ` ``) for line continuation. In CMD, use `^` instead.
+
 
 **Secret Structure:**
 ```json
@@ -218,71 +242,94 @@ This method uses Docker to build a container image and deploy it to AWS Lambda v
 
 **Step 1: Create ECR Repository**
 
-```bash
-aws ecr create-repository \
-  --repository-name video-summarizer \
+**PowerShell:**
+```powershell
+aws ecr create-repository `
+  --repository-name video-summarizer `
   --region us-east-1
+```
+
+**CMD:**
+```cmd
+aws ecr create-repository --repository-name video-summarizer --region us-east-1
 ```
 
 **Step 2: Authenticate Docker to ECR**
 
-```bash
-aws ecr get-login-password --region us-east-1 | \
+**PowerShell:**
+```powershell
+aws ecr get-login-password --region us-east-1 | `
   docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
+```
+
+**CMD:**
+```cmd
+aws ecr get-login-password --region us-east-1 | docker login --username AWS --password-stdin <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com
 ```
 
 **Step 3: Build Docker Image**
 
-```bash
+```powershell
 docker build -t video-summarizer .
 ```
 
 **Step 4: Tag Image for ECR**
 
-```bash
-docker tag video-summarizer:latest \
+**PowerShell:**
+```powershell
+docker tag video-summarizer:latest `
   <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
+```
+
+**CMD:**
+```cmd
+docker tag video-summarizer:latest <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
 ```
 
 **Step 5: Push Image to ECR**
 
-```bash
+```powershell
 docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
 ```
 
 **Step 6: Create Lambda Function from Container Image**
 
-```bash
-aws lambda create-function \
-  --function-name video-summarizer \
-  --package-type Image \
-  --code ImageUri=<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest \
-  --role arn:aws:iam::<ACCOUNT_ID>:role/lambda-execution-role \
-  --timeout 900 \
-  --memory-size 1024 \
-  --environment Variables="{
-    \"AWS_REGION\": \"us-east-1\",
-    \"S3_STATE_BUCKET\": \"your-video-summarizer-state-bucket\",
-    \"SECRETS_MANAGER_SECRET_NAME\": \"video-summarizer-credentials\",
-    \"YOUTUBE_CHANNEL_HANDLE\": \"@yourChannelHandle\",
-    \"EMAIL_SUMMARIES_ENABLED\": \"true\",
-    \"SMTP_PORT\": \"587\"
-  }"
+**PowerShell:**
+```powershell
+aws lambda create-function `
+  --function-name video-summarizer `
+  --package-type Image `
+  --code ImageUri=<ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest `
+  --role arn:aws:iam::<ACCOUNT_ID>:role/lambda-execution-role `
+  --timeout 900 `
+  --memory-size 1024 `
+  --environment Variables='{\"AWS_REGION\":\"us-east-1\",\"S3_STATE_BUCKET\":\"your-video-summarizer-state-bucket\",\"SECRETS_MANAGER_SECRET_NAME\":\"video-summarizer-credentials\",\"YOUTUBE_CHANNEL_HANDLE\":\"@yourChannelHandle\",\"EMAIL_SUMMARIES_ENABLED\":\"true\",\"SMTP_PORT\":\"587\"}'
 ```
+
+**Note:** For complex JSON in PowerShell, you may need to escape quotes differently or use a JSON file. Alternatively, create the function via AWS Console or use a single-line command.
 
 **Step 7: Update Lambda Function Image (for updates)**
 
-```bash
+**PowerShell:**
+```powershell
 # Rebuild and push image
 docker build -t video-summarizer .
-docker tag video-summarizer:latest \
+docker tag video-summarizer:latest `
   <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
 docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
 
 # Update Lambda function
-aws lambda update-function-code \
-  --function-name video-summarizer \
+aws lambda update-function-code `
+  --function-name video-summarizer `
   --image-uri <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
+```
+
+**CMD:**
+```cmd
+docker build -t video-summarizer .
+docker tag video-summarizer:latest <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
+docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
+aws lambda update-function-code --function-name video-summarizer --image-uri <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
 ```
 
 **Container Image Benefits:**
@@ -296,37 +343,44 @@ aws lambda update-function-code \
 
 Package the application:
 
-```bash
+**PowerShell:**
+```powershell
 # Install dependencies
 pip install -r requirements.txt -t package/
 
 # Copy source code
-cp -r src/ package/
-cp -r config/ package/
+Copy-Item -Path src -Destination package\src -Recurse
+Copy-Item -Path config -Destination package\config -Recurse
 
 # Create deployment package
-cd package && zip -r ../lambda-deployment.zip . && cd ..
+Compress-Archive -Path package\* -DestinationPath lambda-deployment.zip -Force
 ```
+
+**CMD (requires 7-Zip or similar for zip command):**
+```cmd
+pip install -r requirements.txt -t package\
+xcopy /E /I src package\src
+xcopy /E /I config package\config
+cd package
+tar -a -cf ..\lambda-deployment.zip *
+cd ..
+```
+
+**Note:** On Windows, you can also use Python's built-in `zipfile` module or install 7-Zip. PowerShell's `Compress-Archive` is the simplest option.
 
 Create the Lambda function:
 
-```bash
-aws lambda create-function \
-  --function-name video-summarizer \
-  --runtime python3.10 \
-  --role arn:aws:iam::YOUR_ACCOUNT_ID:role/lambda-execution-role \
-  --handler src.lambda_handler.lambda_handler \
-  --zip-file fileb://lambda-deployment.zip \
-  --timeout 900 \
-  --memory-size 1024 \
-  --environment Variables="{
-    \"AWS_REGION\": \"us-east-1\",
-    \"S3_STATE_BUCKET\": \"your-video-summarizer-state-bucket\",
-    \"SECRETS_MANAGER_SECRET_NAME\": \"video-summarizer-credentials\",
-    \"YOUTUBE_CHANNEL_HANDLE\": \"@yourChannelHandle\",
-    \"EMAIL_SUMMARIES_ENABLED\": \"true\",
-    \"SMTP_PORT\": \"587\"
-  }"
+**PowerShell:**
+```powershell
+aws lambda create-function `
+  --function-name video-summarizer `
+  --runtime python3.10 `
+  --role arn:aws:iam::YOUR_ACCOUNT_ID:role/lambda-execution-role `
+  --handler src.lambda_handler.lambda_handler `
+  --zip-file fileb://lambda-deployment.zip `
+  --timeout 900 `
+  --memory-size 1024 `
+  --environment Variables='{\"AWS_REGION\":\"us-east-1\",\"S3_STATE_BUCKET\":\"your-video-summarizer-state-bucket\",\"SECRETS_MANAGER_SECRET_NAME\":\"video-summarizer-credentials\",\"YOUTUBE_CHANNEL_HANDLE\":\"@yourChannelHandle\",\"EMAIL_SUMMARIES_ENABLED\":\"true\",\"SMTP_PORT\":\"587\"}'
 ```
 
 **ZIP Deployment Benefits:**
@@ -424,19 +478,31 @@ If using container images, the IAM user/role used for deployment also needs ECR 
 
 Create an EventBridge rule to trigger the Lambda function on a schedule:
 
-```bash
-aws events put-rule \
-  --name video-summarizer-schedule \
-  --schedule-expression "rate(15 minutes)" \
+**PowerShell:**
+```powershell
+aws events put-rule `
+  --name video-summarizer-schedule `
+  --schedule-expression "rate(15 minutes)" `
   --description "Trigger video transcription automation every 15 minutes"
+```
+
+**CMD:**
+```cmd
+aws events put-rule --name video-summarizer-schedule --schedule-expression "rate(15 minutes)" --description "Trigger video transcription automation every 15 minutes"
 ```
 
 Add Lambda as a target:
 
-```bash
-aws events put-targets \
-  --rule video-summarizer-schedule \
-  --targets "Id"="1","Arn"="arn:aws:lambda:REGION:ACCOUNT_ID:function:video-summarizer"
+**PowerShell:**
+```powershell
+aws events put-targets `
+  --rule video-summarizer-schedule `
+  --targets "Id=1,Arn=arn:aws:lambda:REGION:ACCOUNT_ID:function:video-summarizer"
+```
+
+**CMD:**
+```cmd
+aws events put-targets --rule video-summarizer-schedule --targets "Id=1,Arn=arn:aws:lambda:REGION:ACCOUNT_ID:function:video-summarizer"
 ```
 
 **Schedule Options:**
@@ -484,40 +550,54 @@ Test the Docker container using the AWS Lambda Runtime Interface Emulator (inclu
 
 **1. Build the Docker image:**
 
-```bash
+```powershell
 docker build -t video-summarizer:local .
 ```
 
 **2. Run the container with environment variables:**
 
-```bash
-docker run -p 9000:8080 \
-  -e AWS_REGION=us-east-1 \
-  -e YOUTUBE_CHANNEL_HANDLE=@yourChannelHandle \
-  -e YOUTUBE_API_KEY=your-api-key \
-  -e OPENAI_API_KEY=your-openai-key \
+**PowerShell:**
+```powershell
+docker run -p 9000:8080 `
+  --env-file .env `
+  -v ${env:USERPROFILE}\.aws:/root/.aws:ro `
   video-summarizer:local
 ```
 
+**CMD:**
+```cmd
+docker run -p 9000:8080 --env-file .env -v %USERPROFILE%\.aws:/root/.aws:ro video-summarizer:local
+```
+
+**Note:** On Windows, `%USERPROFILE%` (CMD) or `$env:USERPROFILE` (PowerShell) points to `C:\Users\<username>`, which is the Windows equivalent of `~` on Unix systems.
+
 **3. Test with a sample event (in another terminal):**
 
-```bash
-curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" \
-  -d '{}'
+**PowerShell/CMD:**
+```powershell
+curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{}'
 ```
 
 Or use a test event file:
 
-```bash
+**PowerShell:**
+```powershell
 # Create test-event.json
-echo '{"version":"0","id":"test","detail-type":"Scheduled Event","source":"aws.events"}' > test-event.json
+@'
+{"version":"0","id":"test","detail-type":"Scheduled Event","source":"aws.events"}
+'@ | Out-File -FilePath test-event.json -Encoding utf8
 
 # Invoke
-curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" \
-  -d @test-event.json
+curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d '@test-event.json'
 ```
 
-**Note:** For local testing with AWS services (S3/Secrets Manager), you'll need AWS credentials configured (via `-v ~/.aws:/root/.aws:ro` or environment variables).
+**CMD:**
+```cmd
+echo {"version":"0","id":"test","detail-type":"Scheduled Event","source":"aws.events"} > test-event.json
+curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d @test-event.json
+```
+
+**Note:** For local testing with AWS services (S3/Secrets Manager), you'll need AWS credentials configured (via the volume mount `-v ${env:USERPROFILE}\.aws:/root/.aws:ro` in PowerShell or `-v %USERPROFILE%\.aws:/root/.aws:ro` in CMD, or via environment variables).
 
 #### Testing with Local Environment
 
@@ -527,10 +607,19 @@ Local development uses `.env` files. The application automatically detects the e
 
 To test locally with AWS services:
 
-```bash
-export AWS_REGION=us-east-1
-export S3_STATE_BUCKET=your-bucket-name
-export SECRETS_MANAGER_SECRET_NAME=video-summarizer-credentials
+**PowerShell:**
+```powershell
+$env:AWS_REGION = "us-east-1"
+$env:S3_STATE_BUCKET = "your-bucket-name"
+$env:SECRETS_MANAGER_SECRET_NAME = "video-summarizer-credentials"
+python -m src.main --mode once
+```
+
+**CMD:**
+```cmd
+set AWS_REGION=us-east-1
+set S3_STATE_BUCKET=your-bucket-name
+set SECRETS_MANAGER_SECRET_NAME=video-summarizer-credentials
 python -m src.main --mode once
 ```
 
@@ -538,10 +627,11 @@ python -m src.main --mode once
 
 #### Container Image Method
 
-```bash
+**PowerShell:**
+```powershell
 # Rebuild and push image
 docker build -t video-summarizer .
-docker tag video-summarizer:latest \
+docker tag video-summarizer:latest `
   <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
 docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
 
@@ -551,30 +641,43 @@ docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
 
 Alternatively, use a specific tag for versioning:
 
-```bash
-docker tag video-summarizer:latest \
+**PowerShell:**
+```powershell
+docker tag video-summarizer:latest `
   <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:v1.2.3
 docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:v1.2.3
 
 # Update function to use specific tag
-aws lambda update-function-code \
-  --function-name video-summarizer \
+aws lambda update-function-code `
+  --function-name video-summarizer `
   --image-uri <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:v1.2.3
 ```
 
 #### ZIP Deployment Method
 
-```bash
+**PowerShell:**
+```powershell
 # Recreate deployment package
 pip install -r requirements.txt -t package/
-cp -r src/ package/
-cp -r config/ package/
-cd package && zip -r ../lambda-deployment.zip . && cd ..
+Copy-Item -Path src -Destination package\src -Recurse
+Copy-Item -Path config -Destination package\config -Recurse
+Compress-Archive -Path package\* -DestinationPath lambda-deployment.zip -Force
 
 # Update function
-aws lambda update-function-code \
-  --function-name video-summarizer \
+aws lambda update-function-code `
+  --function-name video-summarizer `
   --zip-file fileb://lambda-deployment.zip
+```
+
+**CMD:**
+```cmd
+pip install -r requirements.txt -t package\
+xcopy /E /I src package\src
+xcopy /E /I config package\config
+cd package
+tar -a -cf ..\lambda-deployment.zip *
+cd ..
+aws lambda update-function-code --function-name video-summarizer --zip-file fileb://lambda-deployment.zip
 ```
 
 ### Docker Image Details
@@ -590,13 +693,15 @@ The `.dockerignore` file excludes unnecessary files (cache, tests, docs) to opti
 
 Run the automated test suite with:
 
-```bash
+**PowerShell/CMD:**
+```powershell
 pytest
 ```
 
 Run only unit tests:
 
-```bash
+**PowerShell/CMD:**
+```powershell
 pytest tests/unit/
 ```
 
