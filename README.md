@@ -19,6 +19,8 @@ video-summarizer/
 ├── config/                   # ALL configuration (code, templates, examples)
 │   ├── config.py             # Application configuration code
 │   └── lambda_config.yaml    # EventBridge schedule configuration
+├── scripts/                  # Deployment and utility scripts
+│   └── deploy-lambda.ps1     # Automated Lambda deployment script
 ├── tests/                    # Test suite
 │   └── unit/                 # Unit tests
 ├── data/                     # Data files (gitignored)
@@ -351,44 +353,6 @@ aws lambda update-function-code `
 - Better for complex dependencies
 - Consistent build environment
 
-##### Method B: ZIP Deployment Package
-
-Package the application:
-
-```powershell
-# Install dependencies
-pip install -r requirements.txt -t package/
-
-# Copy source code
-Copy-Item -Path src -Destination package\src -Recurse
-Copy-Item -Path config -Destination package\config -Recurse
-
-# Create deployment package
-Compress-Archive -Path package\* -DestinationPath lambda-deployment.zip -Force
-```
-
-Create the Lambda function (using the same `envvars.json` file created in Step 6):
-
-```powershell
-aws lambda create-function `
-  --function-name video-summarizer `
-  --runtime python3.10 `
-  --role arn:aws:iam::YOUR_ACCOUNT_ID:role/lambda-execution-role `
-  --handler src.lambda_handler.lambda_handler `
-  --zip-file fileb://lambda-deployment.zip `
-  --timeout 900 `
-  --memory-size 1024 `
-  --environment file://envvars.json
-```
-
-**ZIP Deployment Benefits:**
-- Faster deployment cycles
-- Simpler for small applications
-- No Docker required
-- Suitable for deployments up to 250MB (unzipped)
-
-**Note:** Container image deployment is recommended for this project due to dependencies (yt-dlp, etc.) that benefit from the container environment.
-
 #### 4. Configure IAM Role Permissions
 
 The Lambda execution role needs the following permissions:
@@ -488,7 +452,7 @@ Add Lambda as a target:
 ```powershell
 aws events put-targets `
   --rule video-summarizer-schedule `
-  --targets "Id=1,Arn=arn:aws:lambda:REGION:ACCOUNT_ID:function:video-summarizer"
+  --targets "Id=1,Arn=arn:aws:lambda:us-east-1:ACCOUNT_ID:function:video-summarizer"
 ```
 
 **Schedule Options:**
