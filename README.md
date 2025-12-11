@@ -65,6 +65,11 @@ Set the following environment variables (a `.env` file is recommended):
 - `WHISPER_MODEL` (default `whisper-1`)
 - `SUMMARY_MODEL` (default `meta-llama/Llama-3.1-8B-Instruct`)
 
+**For Lambda deployment (used by `scripts/deploy-lambda.ps1`):**
+
+- `AWS_ACCOUNT_ID` – Your AWS account ID (required for deployment)
+- `AWS_REGION` – AWS region (default: `us-east-1`)
+
 ### Email summary delivery
 
 Set `EMAIL_SUMMARIES_ENABLED=true` to automatically summarize the most recent transcript and email both the short and comprehensive summaries via SMTP. When enabled, you must also provide:
@@ -224,6 +229,40 @@ This method uses Docker to build a container image and deploy it to AWS Lambda v
 - Docker installed and running
 - AWS CLI configured
 - ECR repository created
+
+**Quick Start: Automated Deployment**
+
+For automated deployment, use the provided PowerShell script:
+
+1. **Add to `.env` file:**
+   ```env
+   AWS_ACCOUNT_ID=your-account-id
+   AWS_REGION=us-east-1
+   ```
+
+2. **Run the script:**
+```powershell
+# First time deployment
+.\scripts\deploy-lambda.ps1 -Action create
+
+# Update existing function
+.\scripts\deploy-lambda.ps1 -Action update
+
+# Update with specific image tag
+.\scripts\deploy-lambda.ps1 -Action update -ImageTag v1.2.3
+```
+
+The script automates:
+- Docker image build (linux/amd64 platform)
+- ECR authentication
+- Image tagging and pushing
+- Lambda function creation or update
+- Environment variable configuration
+- Error handling and validation
+
+**Manual Deployment Steps**
+
+If you prefer manual deployment, follow the steps below:
 
 **Step 1: Create ECR Repository**
 
