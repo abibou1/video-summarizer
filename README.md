@@ -243,7 +243,7 @@ aws ecr get-login-password --region us-east-1 | `
 **Step 3: Build Docker Image**
 
 ```powershell
-docker build -t video-summarizer .
+docker buildx build --platform linux/amd64 -t video-summarizer:latest .
 ```
 
 **Step 4: Tag Image for ECR**
@@ -259,7 +259,25 @@ docker tag video-summarizer:latest `
 docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
 ```
 
-**Step 6: Create Lambda Function from Container Image**
+**Step 6: Create Environment Variables File**
+
+Create `envvars.json` in your project root with the following structure:
+
+```json
+{
+  "Variables": {
+    "S3_STATE_BUCKET": "your-video-summarizer-state-bucket",
+    "SECRETS_MANAGER_SECRET_NAME": "video-summarizer-credentials",
+    "YOUTUBE_CHANNEL_HANDLE": "@yourChannelHandle",
+    "EMAIL_SUMMARIES_ENABLED": "true",
+    "SMTP_PORT": "587"
+  }
+}
+```
+
+**Note:** `AWS_REGION` is automatically set by Lambda and cannot be specified as an environment variable.
+
+**Step 7: Create Lambda Function from Container Image**
 
 ```powershell
 aws lambda create-function `
@@ -269,14 +287,14 @@ aws lambda create-function `
   --role arn:aws:iam::<ACCOUNT_ID>:role/lambda-execution-role `
   --timeout 900 `
   --memory-size 1024 `
-  --environment Variables='{\"AWS_REGION\":\"us-east-1\",\"S3_STATE_BUCKET\":\"your-video-summarizer-state-bucket\",\"SECRETS_MANAGER_SECRET_NAME\":\"video-summarizer-credentials\",\"YOUTUBE_CHANNEL_HANDLE\":\"@yourChannelHandle\",\"EMAIL_SUMMARIES_ENABLED\":\"true\",\"SMTP_PORT\":\"587\"}'
+  --environment file:/../envvars.json
 ```
 
-**Step 7: Update Lambda Function Image (for updates)**
+**Step 8: Update Lambda Function Image (for updates)**
 
 ```powershell
 # Rebuild and push image
-docker build -t video-summarizer .
+docker buildx build --platform linux/amd64 -t video-summarizer:latest .
 docker tag video-summarizer:latest `
   <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
 docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
@@ -310,7 +328,7 @@ Copy-Item -Path config -Destination package\config -Recurse
 Compress-Archive -Path package\* -DestinationPath lambda-deployment.zip -Force
 ```
 
-Create the Lambda function:
+Create the Lambda function (using the same `envvars.json` file created in Step 6):
 
 ```powershell
 aws lambda create-function `
@@ -321,7 +339,7 @@ aws lambda create-function `
   --zip-file fileb://lambda-deployment.zip `
   --timeout 900 `
   --memory-size 1024 `
-  --environment Variables='{\"AWS_REGION\":\"us-east-1\",\"S3_STATE_BUCKET\":\"your-video-summarizer-state-bucket\",\"SECRETS_MANAGER_SECRET_NAME\":\"video-summarizer-credentials\",\"YOUTUBE_CHANNEL_HANDLE\":\"@yourChannelHandle\",\"EMAIL_SUMMARIES_ENABLED\":\"true\",\"SMTP_PORT\":\"587\"}'
+  --environment file://envvars.json
 ```
 
 **ZIP Deployment Benefits:**
@@ -445,7 +463,6 @@ See `config/lambda_config.yaml` for schedule configuration details.
 ### Lambda Environment Variables
 
 **Required:**
-- `AWS_REGION` - AWS region (e.g., `us-east-1`)
 - `S3_STATE_BUCKET` - S3 bucket name for state storage
 - `SECRETS_MANAGER_SECRET_NAME` - Name of the Secrets Manager secret
 - `YOUTUBE_CHANNEL_HANDLE` - Channel handle (e.g., `@yourChannelHandle`)
@@ -480,7 +497,7 @@ Test the Docker container using the AWS Lambda Runtime Interface Emulator (inclu
 **1. Build the Docker image:**
 
 ```powershell
-docker build -t video-summarizer:local .
+docker buildx build --platform linux/amd64 -t video-summarizer:local .
 ```
 
 **2. Run the container with environment variables:**
@@ -531,7 +548,7 @@ python -m src.main --mode once
 
 ```powershell
 # Rebuild and push image
-docker build -t video-summarizer .
+docker buildx build --platform linux/amd64 -t video-summarizer:latest .
 docker tag video-summarizer:latest `
   <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
 docker push <ACCOUNT_ID>.dkr.ecr.us-east-1.amazonaws.com/video-summarizer:latest
@@ -566,6 +583,16 @@ Compress-Archive -Path package\* -DestinationPath lambda-deployment.zip -Force
 aws lambda update-function-code `
   --function-name video-summarizer `
   --zip-file fileb://lambda-deployment.zip
+```
+
+#### Updating Environment Variables
+
+To update environment variables, modify `envvars.json` and run:
+
+```powershell
+aws lambda update-function-configuration `
+  --function-name video-summarizer `
+  --environment file:/../envvars.json
 ```
 
 ### Docker Image Details
