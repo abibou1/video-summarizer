@@ -76,3 +76,22 @@ if ($Action -eq "create") {
 
 if ($LASTEXITCODE -ne 0) { exit 1 }
 Write-Host "Deployment complete!" -ForegroundColor Green
+
+# Test the deployed Lambda function
+Write-Host "`nTesting Lambda function..." -ForegroundColor Cyan
+aws lambda invoke `
+    --function-name $LAMBDA_FUNCTION_NAME `
+    --cli-binary-format raw-in-base64-out `
+    out.json
+
+if ($LASTEXITCODE -eq 0) {
+    Write-Host "Invocation successful! Response saved to out.json" -ForegroundColor Green
+    Write-Host "Response:" -ForegroundColor Yellow
+    Get-Content out.json | ConvertFrom-Json | ConvertTo-Json -Depth 10
+} else {
+    Write-Host "Invocation failed!" -ForegroundColor Red
+}
+
+# Tail CloudWatch logs
+Write-Host "`nTailing CloudWatch logs (Ctrl+C to stop)..." -ForegroundColor Cyan
+aws logs tail /aws/lambda/$LAMBDA_FUNCTION_NAME --follow
