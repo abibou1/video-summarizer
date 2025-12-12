@@ -152,7 +152,8 @@ def lambda_handler(event: Dict[str, Any], context: Any) -> Dict[str, Any]:
         }
 
     """
-    LOGGER.info("Lambda function invoked. Request ID: %s", context.request_id)
+    request_id = getattr(context, "aws_request_id", getattr(context, "request_id", "unknown"))
+    LOGGER.info("Lambda function invoked. Request ID: %s", request_id)
     LOGGER.debug("Event data: %s", json.dumps(event, default=str))
 
     try:

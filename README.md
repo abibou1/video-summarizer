@@ -438,13 +438,14 @@ If using container images, the IAM user/role used for deployment also needs ECR 
 
 #### 5. Create EventBridge Rule
 
-Create an EventBridge rule to trigger the Lambda function on a schedule:
+Create an EventBridge rule to trigger the Lambda function on a schedule(Mon-FRI 15 UTC):
+
 
 ```powershell
 aws events put-rule `
   --name video-summarizer-schedule `
-  --schedule-expression "rate(15 minutes)" `
-  --description "Trigger video transcription automation every 15 minutes"
+  --schedule-expression "cron(0 15 ? * MON-FRI *)" `
+  --description "Trigger video transcription automation every weekday at 10am EST"
 ```
 
 Add Lambda as a target:
@@ -515,7 +516,7 @@ docker run -p 9000:8080 `
 **3. Test with a sample event (in another terminal):**
 
 ```powershell
-curl -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{}'
+curl.exe -XPOST "http://localhost:9000/2015-03-31/functions/function/invocations" -d '{}'
 ```
 
 Or use a test event file:
