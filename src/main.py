@@ -5,6 +5,7 @@ import argparse
 import logging
 import sys
 import time
+from pathlib import Path
 
 # Add project root to Python path to allow imports of config and src modules
 _project_root = Path(__file__).parent.parent
@@ -57,36 +58,54 @@ def process_latest_video(
     LOGGER.debug("Transcript content:\n%s", transcript)
 
     summaries = None
+    error_reason: str | None = None
+
     if summarizer:
         try:
-            summaries = summarizer.generate_summaries(transcript)
-            LOGGER.info("Generated summaries for %s", latest["title"])
-            # Print summaries to console
-            print("\n" + "=" * 80)
-            print(f"SUMMARIES FOR: {latest['title']}")
-            print("=" * 80)
-            print(f"\nSHORT SUMMARY:\n{summaries['short_summary']}\n")
-            print(f"\nCOMPREHENSIVE SUMMARY:\n{summaries['comprehensive_summary']}\n")
-            print("=" * 80 + "\n")
+            if not transcript or not transcript.strip():
+                error_reason = "Transcript is empty or invalid, unable to generate summaries."
+                LOGGER.warning(error_reason)
+            else:
+                summaries = summarizer.generate_summaries(transcript)
+                LOGGER.info("Generated summaries for %s", latest["title"])
+                # Print summaries to console
+                print("\n" + "=" * 80)
+                print(f"SUMMARIES FOR: {latest['title']}")
+                print("=" * 80)
+                print(f"\nSHORT SUMMARY:\n{summaries['short_summary']}\n")
+                print(f"\nCOMPREHENSIVE SUMMARY:\n{summaries['comprehensive_summary']}\n")
+                print("=" * 80 + "\n")
         except Exception as exc:  # noqa: BLE001
+            error_reason = f"Failed to generate summaries: {str(exc)}"
             LOGGER.exception("Failed to summarize transcript: %s", exc)
     else:
+        error_reason = (
+            "Summarizer was not initialized. Email summaries may be disabled in configuration."
+        )
         LOGGER.warning("Summarizer not initialized. Email enabled: %s", email_service is not None)
 
-    if email_service and summaries:
+    if email_service:
         try:
-            LOGGER.info(
-                "Attempting to send email to %s via SMTP (host inferred from %s)",
-                email_service.config.smtp_recipient,
-                email_service.config.smtp_sender,
-            )
-            email_service.send_summary_email(latest["title"], summaries)
-            LOGGER.info("Email sent successfully")
+            if summaries:
+                LOGGER.info(
+                    "Attempting to send summary email to %s via SMTP (host inferred from %s)",
+                    email_service.config.smtp_recipient,
+                    email_service.config.smtp_sender,
+                )
+                email_service.send_summary_email(latest["title"], summaries)
+                LOGGER.info("Summary email sent successfully")
+            else:
+                assert error_reason is not None, "Error reason must be set when summaries are None"
+                LOGGER.info(
+                    "Attempting to send error notification email to %s via SMTP (host inferred from %s)",
+                    email_service.config.smtp_recipient,
+                    email_service.config.smtp_sender,
+                )
+                email_service.send_error_email(latest["title"], error_reason)
+                LOGGER.info("Error notification email sent successfully")
         except Exception as exc:  # noqa: BLE001
-            LOGGER.exception("Failed to send summary email: %s", exc)
-    elif email_service and not summaries:
-        LOGGER.warning("Email service available but no summaries to send")
-    elif not email_service:
+            LOGGER.exception("Failed to send email: %s", exc)
+    else:
         LOGGER.debug("Email service not initialized (email_enabled may be False)")
 
 
@@ -176,15 +195,16 @@ def process_dummy_transcript(
     except IOError as exc:
         raise IOError(f"Failed to read transcript file: {transcript_path}") from exc
 
-    if not transcript.strip():
-        LOGGER.warning("Dummy transcript file is empty")
-        return
-
     dummy_title = "Dummy Video - Development Mode"
     LOGGER.debug("Transcript content:\n%s", transcript)
 
     summaries = None
-    if summarizer:
+    error_reason: str | None = None
+
+    if not transcript.strip():
+        error_reason = "Transcript is empty or invalid, unable to generate summaries."
+        LOGGER.warning("Dummy transcript file is empty")
+    elif summarizer:
         try:
             summaries = summarizer.generate_summaries(transcript)
             LOGGER.info("Generated summaries for %s", dummy_title)
@@ -196,24 +216,36 @@ def process_dummy_transcript(
             print(f"\nCOMPREHENSIVE SUMMARY:\n{summaries['comprehensive_summary']}\n")
             print("=" * 80 + "\n")
         except Exception as exc:  # noqa: BLE001
+            error_reason = f"Failed to generate summaries: {str(exc)}"
             LOGGER.exception("Failed to summarize transcript: %s", exc)
     else:
+        error_reason = (
+            "Summarizer was not initialized. Email summaries may be disabled in configuration."
+        )
         LOGGER.warning("Summarizer not initialized. Email enabled: %s", email_service is not None)
 
-    if email_service and summaries:
+    if email_service:
         try:
-            LOGGER.info(
-                "Attempting to send email to %s via SMTP (host inferred from %s)",
-                email_service.config.smtp_recipient,
-                email_service.config.smtp_sender,
-            )
-            email_service.send_summary_email(dummy_title, summaries)
-            LOGGER.info("Email sent successfully")
+            if summaries:
+                LOGGER.info(
+                    "Attempting to send summary email to %s via SMTP (host inferred from %s)",
+                    email_service.config.smtp_recipient,
+                    email_service.config.smtp_sender,
+                )
+                email_service.send_summary_email(dummy_title, summaries)
+                LOGGER.info("Summary email sent successfully")
+            else:
+                assert error_reason is not None, "Error reason must be set when summaries are None"
+                LOGGER.info(
+                    "Attempting to send error notification email to %s via SMTP (host inferred from %s)",
+                    email_service.config.smtp_recipient,
+                    email_service.config.smtp_sender,
+                )
+                email_service.send_error_email(dummy_title, error_reason)
+                LOGGER.info("Error notification email sent successfully")
         except Exception as exc:  # noqa: BLE001
-            LOGGER.exception("Failed to send summary email: %s", exc)
-    elif email_service and not summaries:
-        LOGGER.warning("Email service available but no summaries to send")
-    elif not email_service:
+            LOGGER.exception("Failed to send email: %s", exc)
+    else:
         LOGGER.debug("Email service not initialized (email_enabled may be False)")
 
 
