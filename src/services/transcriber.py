@@ -44,6 +44,8 @@ class WhisperTranscriber:
                 "OpenAI API key is required for Whisper transcription. "
                 "Set OPENAI_API_KEY environment variable."
             )
+        # Ensure downloads directory exists (important for Lambda /tmp directory)
+        config.downloads_dir.mkdir(parents=True, exist_ok=True)
         # Configure OpenAI client with timeout (30 minutes for long videos)
         self.client = OpenAI(
             api_key=config.openai_api_key,

@@ -1,0 +1,81 @@
+# .dockerignore - Exclude unnecessary files from Docker build context
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+*.egg-info/
+dist/
+build/
+*.egg
+venv/
+env/
+ENV/
+.venv
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+*.cover
+.tox/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Git
+.git/
+.gitignore
+.gitattributes
+
+# Documentation
+*.md
+!README.md
+docs/
+
+# Data and downloads (not needed in Lambda)
+data/
+downloads/
+*.json
+!package.json
+!package-lock.json
+
+# Logs
+*.log
+logs/
+
+# Environment files
+.env
+.env.local
+.env.*.local
+
+# Project specific
+.cursorrules
+.cursor/
+plans/
+*.plan.md
+
+# CI/CD
+.github/
+.gitlab-ci.yml
+.travis.yml
+
+# Infrastructure (if not needed in image)
+infrastructure/
+
+# Docker
+Dockerfile*
+docker-compose*.yml
+.dockerignore
+
+# Temporary files
+tmp/
+temp/
+*.tmp

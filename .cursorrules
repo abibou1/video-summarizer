@@ -163,4 +163,5 @@ project_root/
 - **Always consider the security implications of your code, especially when dealing with user inputs and external data.**
 - **Actively use and promote best practices for the specific tasks at hand (LLM app development, data cleaning, demo creation, etc.).**
 - **Security first:** Validate all inputs, sanitize external data.
+- **Command examples:** Use PowerShell syntax for all shell commands and examples.
 - **Follow these rules religiously** 

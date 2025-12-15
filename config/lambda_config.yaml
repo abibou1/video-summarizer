@@ -1,0 +1,24 @@
+# config/lambda_config.yaml
+# EventBridge schedule configuration for AWS Lambda deployment
+
+# Default EventBridge schedule expression
+# This determines how often the Lambda function is triggered
+# 
+# Common formats:
+# - Rate expression: "rate(15 minutes)" - triggers every 15 minutes
+# - Cron expression: "cron(0/15 * * * ? *)" - triggers every 15 minutes
+# - Cron expression: "cron(0 12 * * ? *)" - triggers daily at 12:00 PM UTC
+#
+# Default: Every 15 minutes
+schedule_expression: "rate(15 minutes)"
+
+# Alternative cron expression (uncomment to use instead of rate expression)
+# schedule_expression: "cron(0/15 * * * ? *)"
+
+# Schedule description (optional, for documentation)
+schedule_description: "Trigger video transcription automation every 15 minutes"
+
+# Timezone (optional, for cron expressions that use specific times)
+# Note: EventBridge cron uses UTC by default
+# timezone: "UTC"
+

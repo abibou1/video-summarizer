@@ -5,7 +5,6 @@ import argparse
 import logging
 import sys
 import time
-from pathlib import Path
 
 # Add project root to Python path to allow imports of config and src modules
 _project_root = Path(__file__).parent.parent
@@ -25,7 +24,7 @@ LOGGER = logging.getLogger(__name__)
 def process_latest_video(
     poller: YouTubePoller,
     transcriber: WhisperTranscriber,
-    state_file: Path,
+    config: Config,
     summarizer: TranscriptSummarizer | None = None,
     email_service: EmailService | None = None,
 ) -> None:
@@ -34,12 +33,12 @@ def process_latest_video(
     Args:
         poller: Component responsible for discovering YouTube uploads.
         transcriber: Component responsible for downloading audio and invoking Whisper.
-        state_file: Path to the persisted JSON file storing the last processed video ID.
+        config: Configuration object containing state management settings.
         summarizer: Optional component that generates summaries for the transcript.
         email_service: Optional component responsible for emailing summaries.
 
     """
-    last_video_id = load_last_video_id(state_file)
+    last_video_id = load_last_video_id(config)
     latest = poller.fetch_latest_video()
     if not latest:
         LOGGER.info("No videos found.")
@@ -51,7 +50,7 @@ def process_latest_video(
     LOGGER.info("New video detected: %s", latest["title"])
     transcript = transcriber.transcribe(latest["video_id"])
     save_last_video_id(
-        state_file,
+        config,
         latest["video_id"],
         title=latest["title"],
     )
@@ -109,7 +108,7 @@ def run_once() -> None:
     process_latest_video(
         poller,
         transcriber,
-        config.state_file,
+        config,
         summarizer=summarizer,
         email_service=email_service,
     )
@@ -138,7 +137,7 @@ def run_loop(config: Config) -> None:
         process_latest_video(
             poller,
             transcriber,
-            config.state_file,
+            config,
             summarizer=summarizer,
             email_service=email_service,
         )
