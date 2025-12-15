@@ -2,6 +2,7 @@
 from __future__ import annotations
 
 import argparse
+import json
 import logging
 import sys
 import time
@@ -18,6 +19,12 @@ from src.services.summarizer import TranscriptSummarizer
 from src.services.transcriber import WhisperTranscriber
 from src.services.youtube_poller import YouTubePoller
 
+# Import AWS services only when needed to avoid import errors in non-AWS environments
+try:
+    from src.core.aws_services import S3StateManager
+except ImportError:
+    S3StateManager = None  # type: ignore
+
 logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(message)s")
 LOGGER = logging.getLogger(__name__)
 
@@ -28,6 +35,7 @@ def process_latest_video(
     config: Config,
     summarizer: TranscriptSummarizer | None = None,
     email_service: EmailService | None = None,
+    notify_no_new_videos: bool = False,
 ) -> None:
     """Download and transcribe the latest upload if it is new.
 
@@ -37,6 +45,7 @@ def process_latest_video(
         config: Configuration object containing state management settings.
         summarizer: Optional component that generates summaries for the transcript.
         email_service: Optional component responsible for emailing summaries.
+        notify_no_new_videos: If True, send email notification when no new videos are detected.
 
     """
     last_video_id = load_last_video_id(config)
@@ -46,6 +55,32 @@ def process_latest_video(
         return
     if latest["video_id"] == last_video_id:
         LOGGER.info("No new videos since last check.")
+        if notify_no_new_videos and email_service:
+            try:
+                # Load last video title from state (S3 or local filesystem)
+                last_video_title: str | None = None
+                try:
+                    if config.use_aws and config.s3_state_bucket and S3StateManager is not None:
+                        s3_manager = S3StateManager(
+                            bucket_name=config.s3_state_bucket, region=config.aws_region
+                        )
+                        state_data = s3_manager.load_state()
+                        last_video_title = state_data.get("last_video_title") or None
+                    elif config.state_file.exists():
+                        state_data = json.loads(config.state_file.read_text(encoding="utf-8"))
+                        last_video_title = state_data.get("last_video_title") or None
+                except Exception:  # noqa: BLE001
+                    # If loading state fails, continue without title
+                    pass
+                LOGGER.info(
+                    "Attempting to send no new videos notification email to %s via SMTP (host inferred from %s)",
+                    email_service.config.smtp_recipient,
+                    email_service.config.smtp_sender,
+                )
+                email_service.send_no_new_videos_email(last_video_title)
+                LOGGER.info("No new videos notification email sent successfully")
+            except Exception as exc:  # noqa: BLE001
+                LOGGER.exception("Failed to send no new videos notification email: %s", exc)
         return
 
     LOGGER.info("New video detected: %s", latest["title"])
@@ -58,23 +93,23 @@ def process_latest_video(
     LOGGER.debug("Transcript content:\n%s", transcript)
 
     summaries = None
-    error_reason: str | None = None
+    error_reason: str = "Unknown error: Unable to generate summaries."
 
-    if summarizer:
+    # Check if transcript is valid first
+    if not transcript or not transcript.strip():
+        error_reason = "Transcript is empty or invalid, unable to generate summaries."
+        LOGGER.warning(error_reason)
+    elif summarizer:
         try:
-            if not transcript or not transcript.strip():
-                error_reason = "Transcript is empty or invalid, unable to generate summaries."
-                LOGGER.warning(error_reason)
-            else:
-                summaries = summarizer.generate_summaries(transcript)
-                LOGGER.info("Generated summaries for %s", latest["title"])
-                # Print summaries to console
-                print("\n" + "=" * 80)
-                print(f"SUMMARIES FOR: {latest['title']}")
-                print("=" * 80)
-                print(f"\nSHORT SUMMARY:\n{summaries['short_summary']}\n")
-                print(f"\nCOMPREHENSIVE SUMMARY:\n{summaries['comprehensive_summary']}\n")
-                print("=" * 80 + "\n")
+            summaries = summarizer.generate_summaries(transcript)
+            LOGGER.info("Generated summaries for %s", latest["title"])
+            # Print summaries to console
+            print("\n" + "=" * 80)
+            print(f"SUMMARIES FOR: {latest['title']}")
+            print("=" * 80)
+            print(f"\nSHORT SUMMARY:\n{summaries['short_summary']}\n")
+            print(f"\nCOMPREHENSIVE SUMMARY:\n{summaries['comprehensive_summary']}\n")
+            print("=" * 80 + "\n")
         except Exception as exc:  # noqa: BLE001
             error_reason = f"Failed to generate summaries: {str(exc)}"
             LOGGER.exception("Failed to summarize transcript: %s", exc)
@@ -95,7 +130,6 @@ def process_latest_video(
                 email_service.send_summary_email(latest["title"], summaries)
                 LOGGER.info("Summary email sent successfully")
             else:
-                assert error_reason is not None, "Error reason must be set when summaries are None"
                 LOGGER.info(
                     "Attempting to send error notification email to %s via SMTP (host inferred from %s)",
                     email_service.config.smtp_recipient,
@@ -130,6 +164,7 @@ def run_once() -> None:
         config,
         summarizer=summarizer,
         email_service=email_service,
+        notify_no_new_videos=True,
     )
 
 
@@ -199,7 +234,7 @@ def process_dummy_transcript(
     LOGGER.debug("Transcript content:\n%s", transcript)
 
     summaries = None
-    error_reason: str | None = None
+    error_reason: str = "Unknown error: Unable to generate summaries."
 
     if not transcript.strip():
         error_reason = "Transcript is empty or invalid, unable to generate summaries."
@@ -235,7 +270,6 @@ def process_dummy_transcript(
                 email_service.send_summary_email(dummy_title, summaries)
                 LOGGER.info("Summary email sent successfully")
             else:
-                assert error_reason is not None, "Error reason must be set when summaries are None"
                 LOGGER.info(
                     "Attempting to send error notification email to %s via SMTP (host inferred from %s)",
                     email_service.config.smtp_recipient,
