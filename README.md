@@ -501,7 +501,7 @@ Test the Docker container using the AWS Lambda Runtime Interface Emulator (inclu
 **1. Build the Docker image:**
 
 ```powershell
-docker buildx build --platform linux/amd64 -t video-summarizer:local .
+docker buildx build --load --platform linux/amd64 -t video-summarizer:local .
 ```
 
 **2. Run the container with environment variables:**
