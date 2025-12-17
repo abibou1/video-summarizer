@@ -1,6 +1,6 @@
 # YouTube Channel Transcription Automation
 
-This project polls a YouTube channel for new uploads and generates transcripts using YouTube's native transcripts when available, falling back to OpenAI Whisper when transcripts are unavailable. The transcript stays in memory and is fed directly into the summarization/email pipeline.
+This project polls a YouTube channel for new uploads and generates transcripts using a **strict transcript-first approach**: it prioritizes YouTube's native transcripts (manually created, then auto-generated) and only downloads audio as a last-resort fallback when no transcripts are available. The transcript stays in memory and is fed directly into the summarization/email pipeline.
 
 ## Project Structure
 
@@ -25,7 +25,7 @@ video-summarizer/
 │   └── unit/                 # Unit tests
 ├── data/                     # Data files (gitignored)
 │   └── transcript.txt        # Dummy transcript for development mode
-├── downloads/                # Temporary audio files (gitignored)
+├── downloads/                # Temporary audio files (gitignored, only used as last-resort fallback)
 ├── requirements.txt          # Python dependencies
 ├── Dockerfile                # Docker image for Lambda deployment
 ├── .dockerignore             # Docker build context exclusions
@@ -36,7 +36,7 @@ video-summarizer/
 
 - Python 3.10+
 - A YouTube Data API key with read access
-- An OpenAI API key enabled for the Whisper (`whisper-1`) model (for transcription fallback)
+- An OpenAI API key enabled for the Whisper (`whisper-1`) model (required only as a last-resort fallback when YouTube transcripts are unavailable)
 - A Hugging Face account and access token (required only when email summaries are enabled)
 
 Install dependencies:
@@ -54,7 +54,7 @@ Set the following environment variables (a `.env` file is recommended):
 **Required:**
 - `YOUTUBE_API_KEY` – provided key for the YouTube Data API
 - `YOUTUBE_CHANNEL_HANDLE` – channel handle such as `@anyYoutubeChannel`
-- `OPENAI_API_KEY` – OpenAI API key with Whisper access (required for transcription fallback when YouTube transcripts are unavailable)
+- `OPENAI_API_KEY` – OpenAI API key with Whisper access (required only as a last-resort fallback when YouTube transcripts are completely unavailable)
 
 **Required when email summaries are enabled:**
 - `HF_TOKEN` – Hugging Face access token (required for Llama model access when `EMAIL_SUMMARIES_ENABLED=true`)
@@ -151,7 +151,23 @@ Development mode reads a transcript from `data/transcript.txt` instead of downlo
 
 ### How It Works
 
-If a new video is detected, the script attempts to fetch the transcript directly from YouTube first. If no transcript is available, it downloads the audio and transcribes it via OpenAI Whisper. The transcript is kept in memory and used directly for summarization. The last processed video ID is stored to avoid duplicate work. When email delivery is configured, the pipeline generates both a concise and comprehensive summary and emails them.
+The pipeline follows a **strict transcript-first approach** to minimize unnecessary audio downloads:
+
+1. **Discover new videos**: Uses YouTube Data API to poll the channel for the latest upload. Persists the last processed video ID to avoid duplicates. No video or audio is downloaded at this stage.
+
+2. **Attempt transcript retrieval (PRIMARY PATH)**:
+   - Tries **manually created transcripts** first (prefers English, falls back to first available language)
+   - If no manual transcripts exist, tries **auto-generated transcripts** (prefers English, falls back to first available language)
+   - If a transcript is successfully retrieved, it's stored in memory and the pipeline continues directly to summarization
+   - **Audio download is completely skipped** if a transcript exists (yt-dlp is never imported or initialized)
+
+3. **Audio download fallback (LAST RESORT ONLY)**:
+   - Only executed if transcript retrieval completely fails
+   - Downloads audio using yt-dlp (lazily imported only when needed)
+   - Transcribes audio via OpenAI Whisper
+   - Temporary audio files are cleaned up after transcription
+
+The transcript is kept in memory and used directly for summarization. When email delivery is configured, the pipeline generates both a concise and comprehensive summary and emails them.
 
 ## AWS Lambda Deployment
 
