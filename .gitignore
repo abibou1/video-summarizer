@@ -40,6 +40,10 @@ data/
 downloads/
 transcripts/
 
+
+# outputs
+out.json
+
 last_video_id.json
 
 # Node.js (if applicable)

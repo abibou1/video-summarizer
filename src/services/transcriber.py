@@ -8,10 +8,10 @@ from pathlib import Path
 from typing import Optional
 
 from openai import OpenAI, Timeout as OpenAITimeout
-from yt_dlp import YoutubeDL
 from youtube_transcript_api import (
     NoTranscriptFound,
     TranscriptsDisabled,
+    TranscriptList,
     VideoUnavailable,
     YouTubeTranscriptApi,
 )
@@ -58,6 +58,11 @@ class WhisperTranscriber:
     def get_youtube_transcript(self, video_id: str) -> Optional[str]:
         """Fetch transcript directly from YouTube if available.
 
+        Implements strict transcript-first approach with priority:
+        1. Manually created transcripts (prefer English, fallback to first available)
+        2. Auto-generated transcripts (prefer English, fallback to first available)
+        3. Returns None if no transcripts available (triggers audio download fallback)
+
         Args:
             video_id: Identifier of the YouTube video.
 
@@ -67,24 +72,125 @@ class WhisperTranscriber:
         """
         try:
             LOGGER.info("Attempting to fetch YouTube transcript for video %s", video_id)
-            # Try the correct method - it's a module-level function
-            transcript_list = YouTubeTranscriptApi.get_transcript(
-                video_id, languages=["en"]
-            )
-            # Combine all transcript entries into a single text string
-            transcript_text = " ".join([entry["text"] for entry in transcript_list])
-            LOGGER.info(
-                "Successfully retrieved YouTube transcript for video %s (%d entries, %d characters)",
-                video_id,
-                len(transcript_list),
-                len(transcript_text),
-            )
-            return transcript_text
-        except (NoTranscriptFound, AttributeError) as exc:
+            
+            # List all available transcripts
+            transcript_list: TranscriptList = YouTubeTranscriptApi.list_transcripts(video_id)
+            
+            # Step 1: Try manually created transcripts first
+            manual_transcripts = [
+                transcript for transcript in transcript_list
+                if not transcript.is_generated
+            ]
+            
+            if manual_transcripts:
+                LOGGER.info(
+                    "Found %d manually created transcript(s) for video %s",
+                    len(manual_transcripts),
+                    video_id,
+                )
+                
+                # Prefer English manual transcript
+                english_manual = next(
+                    (t for t in manual_transcripts if t.language_code == "en"),
+                    None,
+                )
+                
+                if english_manual:
+                    LOGGER.info(
+                        "Using English manually created transcript for video %s",
+                        video_id,
+                    )
+                    transcript_data = english_manual.fetch()
+                    transcript_text = " ".join([entry["text"] for entry in transcript_data])
+                    LOGGER.info(
+                        "Successfully retrieved English manual transcript for video %s (%d entries, %d characters)",
+                        video_id,
+                        len(transcript_data),
+                        len(transcript_text),
+                    )
+                    return transcript_text
+                
+                # Fallback to first available manual transcript
+                first_manual = manual_transcripts[0]
+                LOGGER.info(
+                    "Using first available manually created transcript (language: %s) for video %s",
+                    first_manual.language_code,
+                    video_id,
+                )
+                transcript_data = first_manual.fetch()
+                transcript_text = " ".join([entry["text"] for entry in transcript_data])
+                LOGGER.info(
+                    "Successfully retrieved manual transcript (language: %s) for video %s (%d entries, %d characters)",
+                    first_manual.language_code,
+                    video_id,
+                    len(transcript_data),
+                    len(transcript_text),
+                )
+                return transcript_text
+            
+            # Step 2: Try auto-generated transcripts if no manual transcripts found
+            auto_transcripts = [
+                transcript for transcript in transcript_list
+                if transcript.is_generated
+            ]
+            
+            if auto_transcripts:
+                LOGGER.info(
+                    "Found %d auto-generated transcript(s) for video %s (no manual transcripts available)",
+                    len(auto_transcripts),
+                    video_id,
+                )
+                
+                # Prefer English auto-generated transcript
+                english_auto = next(
+                    (t for t in auto_transcripts if t.language_code == "en"),
+                    None,
+                )
+                
+                if english_auto:
+                    LOGGER.info(
+                        "Using English auto-generated transcript for video %s",
+                        video_id,
+                    )
+                    transcript_data = english_auto.fetch()
+                    transcript_text = " ".join([entry["text"] for entry in transcript_data])
+                    LOGGER.info(
+                        "Successfully retrieved English auto-generated transcript for video %s (%d entries, %d characters)",
+                        video_id,
+                        len(transcript_data),
+                        len(transcript_text),
+                    )
+                    return transcript_text
+                
+                # Fallback to first available auto-generated transcript
+                first_auto = auto_transcripts[0]
+                LOGGER.info(
+                    "Using first available auto-generated transcript (language: %s) for video %s",
+                    first_auto.language_code,
+                    video_id,
+                )
+                transcript_data = first_auto.fetch()
+                transcript_text = " ".join([entry["text"] for entry in transcript_data])
+                LOGGER.info(
+                    "Successfully retrieved auto-generated transcript (language: %s) for video %s (%d entries, %d characters)",
+                    first_auto.language_code,
+                    video_id,
+                    len(transcript_data),
+                    len(transcript_text),
+                )
+                return transcript_text
+            
+            # No transcripts available
             LOGGER.warning(
-                "No transcript found for video %s (%s), falling back to Whisper",
+                "No transcripts (manual or auto-generated) found for video %s, falling back to Whisper",
                 video_id,
-                type(exc).__name__,
+            )
+            return None
+            
+        except NoTranscriptFound:
+            LOGGER.warning(
+                "No transcript found for video %s, falling back to Whisper",
+                video_id,
             )
             return None
         except TranscriptsDisabled:
@@ -109,6 +215,10 @@ class WhisperTranscriber:
     def download_audio(self, video_id: str) -> Path:
         """Download the YouTube video's audio track as an intermediate file.
 
+        This method is only called as a last-resort fallback when transcript
+        retrieval completely fails. yt-dlp is imported lazily here to ensure
+        it's never loaded if a transcript exists.
+
         Args:
             video_id: Identifier of the YouTube video.
 
@@ -116,9 +226,13 @@ class WhisperTranscriber:
             Path pointing to the downloaded media file.
 
         Raises:
-            RuntimeError: If youtube-dl is unable to download the video within timeout.
+            RuntimeError: If yt-dlp is unable to download the video within timeout.
 
         """
+        # Lazy import: yt-dlp is only imported when transcript retrieval fails
+        # This enforces the strict transcript-first invariant
+        from yt_dlp import YoutubeDL  # noqa: PLC0415
+        
         url = f"https://www.youtube.com/watch?v={video_id}"
         output_template = str(self.config.downloads_dir / f"{video_id}.%(ext)s")
         download_start_time = time.time()

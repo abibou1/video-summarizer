@@ -44,7 +44,7 @@ if ($LASTEXITCODE -ne 0) { exit 1 }
 
 # Build image
 Write-Host "Building Docker image..." -ForegroundColor Cyan
-docker buildx build --platform linux/amd64 --no-cache -t ${ECR_REPOSITORY_NAME}:${ImageTag} .
+docker build --load --platform linux/amd64 --no-cache -t ${ECR_REPOSITORY_NAME}:${ImageTag} .
 if ($LASTEXITCODE -ne 0) { exit 1 }
 
 # Tag and push
